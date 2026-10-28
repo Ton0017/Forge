@@ -18,11 +18,12 @@ jobs:
       - name: Install Cordova
         run: npm install -g cordova
 
-      - name: Create Cordova project and copy game files
+      - name: Create Cordova project and copy files
         run: |
           cordova create cordova-app com.forge.game "Chronicles of the Forge"
           rm -rf cordova-app/www/*
           cp -r game/* cordova-app/www/
+          cp game/config.xml cordova-app/config.xml
 
       - name: Add Android platform and build APK
         run: |
