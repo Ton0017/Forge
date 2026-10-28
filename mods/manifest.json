@@ -4,7 +4,6 @@
     "image_cache.js",
     "sprite_fix.js",
     "error_handler.js",
-    "//sprite_fix.js",
     "sprite_debug.js",
     "df_phrases_extended.js",
     "df_massive_dictionary.js",
