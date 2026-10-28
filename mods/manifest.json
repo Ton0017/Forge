@@ -151,6 +151,5 @@
     "tile_fallback.js",
     "ui_cleanup.js",
     "system_trees.js",
-    "//archive_system.js"
   ]
 }
