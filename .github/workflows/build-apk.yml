@@ -5,15 +5,33 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Build APK from HTML
-        uses: darkshredder/web-to-app-action@main
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          build-folder-path: "."
-          app-name: "Chronicles of the Forge"
-          output-folder-path: "apk"
+          path: game
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Cordova
+        run: npm install -g cordova
+
+      - name: Create Cordova project and copy game files
+        run: |
+          cordova create cordova-app com.forge.game "Chronicles of the Forge"
+          rm -rf cordova-app/www/*
+          cp -r game/* cordova-app/www/
+
+      - name: Add Android platform and build APK
+        run: |
+          cd cordova-app
+          cordova platform add android
+          cordova build android
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: forge-apk
-          path: apk/
+          path: cordova-app/platforms/android/app/build/outputs/apk/debug/app-debug.apk
