@@ -150,6 +150,5 @@
     "fishing_lexicon.js",
     "tile_fallback.js",
     "ui_cleanup.js",
-    "system_trees.js",
-  ]
+    "system_trees.js"]
 }
