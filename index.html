@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Хроника Подземной Кузни</title>
+<style>
+  /* Принудительно применяем пиксельный шрифт ко всему интерфейсу */
+  h1, h2, h3, p, div, span, button {
+    font-family: 'Pixelify Sans', 'VT323', 'Press Start 2P', monospace !important;
+    -webkit-font-smoothing: none !important;
+    font-smooth: never !important;
+    text-rendering: optimizeSpeed !important;
+  }
+  /* Заголовок в меню делаем максимально "пиксельным" */
+  #menu h1, #menu-overlay h1 {
+    font-family: 'Pixelify Sans', 'VT323', monospace !important;
+    letter-spacing: 2px !important;
+    line-height: 1.2 !important;
+  }
+
+:root {
+  --bg: #12100e; --panel: #1e1a16; --border: #4a3b2a;
+  --text: #d4c4a8; --accent: #c87b32; --danger: #a83838; --good: #4a8a4a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body {
+  font-family: 'Courier New', Courier, monospace; /* НАДЕЖНЫЙ ШРИФТ */
+  background: var(--bg); color: var(--text);
+  width: 100%; height: 100dvh; overflow: hidden; display: flex; flex-direction: column;
+  user-select: none; font-weight: bold;
+}
+#topbar {
+  display: flex; justify-content: space-between; padding: 4px 8px;
+  background: var(--panel); border-bottom: 2px solid var(--border); font-size: 14px;
+  height: 40px; align-items: center; flex-shrink: 0;
+}
+.res-group { display: flex; gap: 12px; align-items: center; }
+.res-item { display: flex; align-items: center; gap: 4px; }
+.res-item img { width: 20px; height: 20px; image-rendering: pixelated; object-fit: contain; }
+#main-area { flex: 1 1 auto; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+#canvas-container { flex: 1 1 auto; position: relative; background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+canvas#gameCanvas { display: block; image-rendering: pixelated; max-width: 100%; max-height: 100%; object-fit: contain; }
+#bottom-tabs {
+  display: flex; background: var(--panel); border-top: 2px solid var(--border); height: 56px; flex-shrink: 0;
+}
+.tab-btn {
+  flex: 1; background: none; border: none; border-right: 1px solid var(--border);
+  color: var(--text); font-family: inherit; font-size: 12px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+.tab-btn img { width: 24px; height: 24px; image-rendering: pixelated; object-fit: contain; }
+.tab-btn.active { background: #2a221c; color: var(--accent); border-bottom: 2px solid var(--accent); }
+.panel {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--panel); z-index: 10; display: none; flex-direction: column;
+  overflow-y: auto; padding: 10px; padding-bottom: 60px;
+}
+.panel.active { display: flex; }
+.panel-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 5px; margin-bottom: 10px; position: sticky; top: -10px; background: var(--panel); z-index: 2; padding-top: 5px; margin-top: -5px;}
+.panel-header h2 { font-size: 16px; color: var(--accent); margin: 0; }
+.close-btn { background: var(--danger); color: white; border: 1px solid #ff8888; padding: 4px 12px; font-family: inherit; font-size: 14px; cursor: pointer; border-radius: 3px; font-weight: bold; }
+.npc-card {
+  display: flex; background: #28211a; border: 1px solid var(--border); margin-bottom: 8px; padding: 8px;
+  gap: 10px; border-radius: 4px;
+}
+.npc-card img { width: 48px; height: 48px; image-rendering: pixelated; background: #111; border: 1px solid #000; object-fit: contain;}
+.npc-info { flex: 1; display: flex; flex-direction: column; justify-content: center; font-size: 13px; }
+.npc-info .name { color: var(--accent); font-weight: bold; font-size: 14px; }
+.npc-info .task { font-size: 11px; color: #a09080; margin-bottom: 2px;}
+.bar-bg { width: 100%; height: 6px; background: #000; margin-top: 2px; border: 1px solid #333; border-radius: 2px;}
+.bar-fill { height: 100%; border-radius: 1px; }
+.bar-hp { background: var(--danger); }
+.bar-food { background: var(--good); }
+.btn {
+  background: #3a2e24; border: 1px solid var(--border); color: var(--text);
+  padding: 10px 14px; font-family: inherit; font-size: 14px; cursor: pointer; border-radius: 3px; font-weight: bold;
+}
+.btn:active { background: #5a4a3a; }
+.log-entry { margin-bottom: 4px; font-size: 13px; line-height: 1.4; border-bottom: 1px solid #2a221c; padding-bottom: 4px; }
+.log-entry.sys { color: #8a7a6a; font-style: italic; }
+.log-entry.death { color: var(--danger); }
+.log-entry.good { color: var(--good); }
+.log-entry.combat { color: var(--accent); }
+#menu-overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+}
+#menu-overlay.hidden { display: none; }
+#menu-overlay h1 { font-size: 24px; color: var(--accent); margin-bottom: 20px; text-align: center; }
+#menu-overlay .btn { width: 100%; max-width: 300px; margin-bottom: 10px; padding: 12px; font-size: 16px; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="res-group">
+    <div class="res-item"><img id="ui-gold-icon" src=""><span id="ui-gold">0</span></div>
+    <div class="res-item"><img id="ui-ore-icon" src=""><span id="ui-ore">0</span></div>
+    <div class="res-item"><img id="ui-food-icon" src=""><span id="ui-food">0</span></div>
+  </div>
+  <div class="res-group">
+    <div id="ui-day">День 1</div>
+  </div>
+</div>
+
+<div id="main-area">
+  <div id="canvas-container">
+    <canvas id="gameCanvas" width="640" height="480"></canvas>
+  </div>
+
+  <div id="panel-crew" class="panel">
+    <div class="panel-header"><h2>Артель</h2><button class="close-btn" onclick="closePanels()">X</button></div>
+    <div id="crew-list"></div>
+  </div>
+
+  <div id="panel-forge" class="panel">
+    <div class="panel-header"><h2>Кузня</h2><button class="close-btn" onclick="closePanels()">X</button></div>
+    <div style="margin-bottom:15px;">
+      <button class="btn" id="btn-hire" style="width:100%;">Нанять работягу (50 золота)</button>
+    </div>
+  </div>
+
+  <div id="panel-chronicle" class="panel">
+    <div class="panel-header"><h2>Летопись</h2><button class="close-btn" onclick="closePanels()">X</button></div>
+    <div id="chronicle-text"></div>
+  </div>
+
+  <div id="panel-trade" class="panel">
+    <div class="panel-header"><h2>Торговля</h2><button class="close-btn" onclick="closePanels()">X</button></div>
+    <div id="trade-text" style="padding:10px;">Караваны приходят раз в несколько дней...</div>
+  </div>
+</div>
+
+<div id="bottom-tabs">
+  <button class="tab-btn active" data-tab="crew"><img id="tab-icon-crew" src="">Артель</button>
+  <button class="tab-btn" data-tab="forge"><img id="tab-icon-forge" src="">Кузня</button>
+  <button class="tab-btn" data-tab="trade"><img id="tab-icon-trade" src="">Торг</button>
+  <button class="tab-btn" data-tab="chronicle"><img id="tab-icon-chronicle" src="">Хроника</button>
+</div>
+
+<div id="menu-overlay">
+  <h1><span style="color:#a83838;">CHRONICLES</span><br><span style="color:#888;font-size:18px;">OF THE FORGE</span></h1>
+  <button class="btn" id="btn-start">New Game</button>
+  <button class="btn" id="btn-continue">Continue</button>
+  <button class="btn" id="btn-history">Archive of Worlds</button>
+</div>
+
+<script src="bootstrap.js"></script>
+<script src="loader.js"></script>
+</body></html>

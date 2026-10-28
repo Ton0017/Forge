@@ -1,0 +1,87 @@
+(function(){
+  // Инициализация отношений и памяти для мобов
+  function initMobMind(mob) {
+    if (!mob.relations) mob.relations = {};
+    if (!mob.memory) mob.memory = [];
+    if (!mob.bondedTo) mob.bondedTo = null;
+    if (!mob.gender) mob.gender = Math.random() < 0.5 ? 'male' : 'female';
+    if (mob.canBreed === undefined) mob.canBreed = (mob.id === 'cat' || mob.id === 'rabbit' || mob.id === 'boar');
+  }
+
+  // 1. РОСТ ОТНОШЕНИЙ (Шестерёнка)
+  Reg.on('tick', (state) => {
+    if (state.tick % 20 !== 0) return; // Раз в 20 тиков
+
+    for (let k in state.cells) {
+      const c = state.cells[k];
+      if (!c.animal && !c.monster) continue;
+
+      const mob = c.animal || c.monster;
+      initMobMind(mob);
+
+      const [x, y] = k.split(',').map(Number);
+
+      // Ищем дварфов рядом (в радиусе 2)
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dy = -2; dy <= 2; dy++) {
+          const n = state.npcs.find(n => n.alive && n.x === x + dx && n.y === y + dy);
+          if (n) {
+            // Привязанность растёт от близости
+            const curVal = mob.relations[n.id] || 0;
+            mob.relations[n.id] = curVal + 1;
+            
+            // Если привязанность достигла 50 — выбираем хозяина
+            if (mob.relations[n.id] >= 50 && !mob.bondedTo) {
+              mob.bondedTo = n.id;
+              Reg.log(`[Привязанность] ${mob.name} привык к ${n.name} и теперь следует за ним.`, 'sys');
+              if (window.recordMobAction) window.recordMobAction(mob, 'bonded', n.name);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // 2. ДВИЖЕНИЕ К ХОЗЯИНУ (Следствие отношений)
+  Reg.on('tick', (state) => {
+    if (state.tick % 10 !== 0) return;
+
+    for (let k in state.cells) {
+      const c = state.cells[k];
+      if (!c.animal && !c.monster) continue;
+
+      const mob = c.animal || c.monster;
+      if (!mob.bondedTo) continue;
+
+      const owner = state.npcs.find(n => n.id === mob.bondedTo && n.alive);
+      if (!owner) {
+        // Хозяин умер — моб в печали
+        if (mob.bondedTo) {
+          mob.bondedTo = null;
+          mob.memory.push({ type: 'sadness', text: 'Хозяин ушел навсегда.' });
+          if (window.recordMobAction) window.recordMobAction(mob, 'mourning');
+        }
+        continue;
+      }
+
+      const [x, y] = k.split(',').map(Number);
+      const dist = Math.abs(x - owner.x) + Math.abs(y - owner.y);
+
+      // Если моб слишком далеко от хозяина — он идёт к нему
+      if (dist > 3 && Math.random() < 0.5) {
+        const stepX = Math.sign(owner.x - x);
+        const stepY = Math.sign(owner.y - y);
+        const nextCell = getCell(x + stepX, y + stepY);
+        
+        if (nextCell && nextCell.type === 'floor' && !nextCell.animal && !nextCell.monster && !state.npcs.some(n => n.x === x + stepX && n.y === y + stepY)) {
+          nextCell.animal = mob;
+          c.animal = null;
+          mob.x = x + stepX;
+          mob.y = y + stepY;
+        }
+      }
+    }
+  });
+  
+  console.log('[Mob Relations] Шестерёнка привязанности запущена.');
+})();

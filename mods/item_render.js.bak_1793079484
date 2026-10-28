@@ -1,0 +1,123 @@
+(function(){
+  let _camX = 0, _camY = 0;
+  let _lastUpdate = 0;
+
+  function updateCamera() {
+    const now = Date.now();
+    if (now - _lastUpdate < 30) return; 
+    _lastUpdate = now;
+    
+    if (!window.state || !window.state.forgePos) return;
+    const canvas = document.getElementById('gameCanvas');
+    if (!canvas) return;
+    
+    const COLS = Math.floor(canvas.width / 32);
+    const ROWS = Math.floor(canvas.height / 32);
+    
+    _camX = window.state.forgePos.x - Math.floor(COLS / 2) + (window.camOffsetX || 0);
+    _camY = window.state.forgePos.y - Math.floor(ROWS / 2) + (window.camOffsetY || 0);
+    
+    let selected = null;
+    try { selected = (typeof selectedNpcId !== 'undefined') ? selectedNpcId : null; } catch(e) {}
+    if (!selected && window.selectedNpcId) selected = window.selectedNpcId;
+    
+    if (selected) {
+      const n = window.state.npcs.find(x => x.id === selected);
+      if (n && n.alive) {
+        _camX = n.x - Math.floor(COLS / 2);
+        _camY = n.y - Math.floor(ROWS / 2);
+      }
+    }
+  }
+  
+  function drawItemsOverlay(ctx, sx, sy) {
+    if (!window.state || !window.state.cells) return;
+    const wx = Math.floor(sx / 32) + _camX;
+    const wy = Math.floor(sy / 32) + _camY;
+    const cell = window.state.cells[wx + ',' + wy];
+    
+    if (!cell || !cell.items || cell.items.length === 0) return;
+    
+    // ЗАЩИТА: Берем ПОСЛЕДНИЙ предмет из кучи (тот, что упал сверху)
+    if (!cell.items || cell.items.length === 0) return;
+    const item = cell.items[cell.items.length - 1];
+    if (!item || !item.name) return;
+    if (!cell._rlog) { cell._rlog = true; if (window.Reg && Reg.log) Reg.log('[РЕНДЕР] ' + item.name + ' в клетке ' + wx + ',' + wy, 'sys'); }
+    
+    let imgPath = '';
+    if (item.file) {
+        if (item.file.includes('/')) {
+            imgPath = item.file; // Если полный путь (например, assets/objects/...)
+        } else {
+            imgPath = 'assets/equipment/' + item.file; // Дефолтная папка
+        }
+    } else {
+        imgPath = 'assets/icons/53 question trap.png'; // Заглушка, если файла нет
+    }
+    
+    // ЕСЛИ ЭТО ЭМОДЗИ (например, кирка)
+    if (item.isEmoji) {
+        ctx.save();
+        // Темная подложка (чтобы эмодзи не сливалось с полом)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.beginPath();
+        ctx.arc(sx + 16, sy + 16, 14, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Само эмодзи
+        ctx.font = "20px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(item.file, sx + 16, sy + 16);
+        ctx.restore();
+        return;
+    }
+
+    // ЕСЛИ ЭТО ОБЛОМКИ — РИСУЕМ КОДОМ
+    if (item.tags && item.tags.includes('scrap')) {
+        if (Reg.tiles && Reg.tiles['scrap']) {
+            Reg.tiles['scrap'](ctx, sx, sy, 0);
+        }
+        return;
+    }
+
+    let img = null;
+    try { img = getImg(imgPath); } catch(e) {}
+    
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(sx + 4, sy + 4, 24, 24);
+    
+    if (img && img.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, sx + 4, sy + 4, 24, 24);
+    } else {
+        // Ждем загрузки картинки, не рисуем рамку
+    }
+    
+    if (cell.items.length > 1) {
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 10px monospace';
+      ctx.fillText('x' + cell.items.length, sx + 2, sy + 12);
+    }
+    ctx.restore();
+  }
+  
+  setTimeout(() => {
+    const types = ['floor', 'grass', 'grass_berry', 'water', 'mushroom', 'ruins', 'ore', 'stone'];
+    types.forEach(type => {
+      if (!Reg.tiles[type]) return;
+      const orig = Reg.tiles[type];
+      Reg.tiles[type] = function(ctx, sx, sy, seed) {
+        try {
+           updateCamera();
+           orig.call(this, ctx, sx, sy, seed);
+           drawItemsOverlay(ctx, sx, sy);
+        } catch(e) {
+           // Если произошла ошибка, просто рисуем базовый тайл
+           if (orig) orig.call(this, ctx, sx, sy, seed);
+        }
+      };
+    });
+    console.log(`[Item Render] Отрисовка предметов защищена от сбоев.`);
+  }, 1500);
+})();
