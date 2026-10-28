@@ -24,6 +24,7 @@ jobs:
           rm -rf cordova-app/www/*
           cp -r game/* cordova-app/www/
           cp game/config.xml cordova-app/config.xml
+          cp game/icon.png cordova-app/icon.png
 
       - name: Add Android platform and build APK
         run: |
