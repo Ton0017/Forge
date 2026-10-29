@@ -7,69 +7,84 @@
         font-family: Georgia, 'Times New Roman', serif !important;
       }
 
-      /* 2. ПАНЕЛИ И МОДАЛКИ (Кованое железо + тёмный камень) */
-      .panel, .df-modal, #df-character-modal, #panel-crew, #panel-trade, #panel-craft, #bestiary-modal, #mob-modal, #debug-modal, #df-modal {
-        background-color: #1a1612 !important;
-        background-image: 
-          repeating-linear-gradient(45deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 2px, transparent 2px, transparent 4px),
-          radial-gradient(circle at 10% 10%, rgba(255,255,255,0.05) 0%, transparent 50%) !important;
+      /* 2. ПАНЕЛИ И МОДАЛКИ (DF-стиль: чёрный фон + жёлтая рамка) */
+      .panel, .df-modal, #df-character-modal, #panel-crew, #panel-trade, #panel-craft, #bestiary-modal, #mob-modal, #debug-modal, #df-modal, #storage-modal, #trade-modal {
+        background-color: #000000 !important;
+        background-image: none !important;
         
-        /* Железная рамка */
-        border: 4px solid #3a3a40 !important;
-        box-shadow: 
-          inset 0 0 0 2px #55555a, /* Внутренний блик металла */
-          inset 0 0 15px #000, 
-          0 5px 20px rgba(0,0,0,0.9) !important;
-        
-        color: #e8d8c0 !important; /* Слоновая кость */
-        border-radius: 2px !important;
+        /* Жёлто-оранжевая рамка (как в DF) */
+        border: 2px solid #d4a040 !important;
+        box-shadow: 0 0 15px rgba(0,0,0,0.9) !important;
+
+        color: #e0d8c8 !important;
+        border-radius: 0 !important;
         max-height: 85vh !important;
         overflow-y: auto !important;
       }
 
-      /* 3. КНОПКИ (Деревянные, детализированные) */
+      /* Заголовки внутри модалок — жёлтые, как в DF */
+      #df-character-modal h1, #df-character-modal h2, #df-character-modal h3,
+      #bestiary-modal h1, #bestiary-modal h2, #bestiary-modal h3,
+      #mob-modal h1, #mob-modal h2, #mob-modal h3,
+      #storage-modal h1, #storage-modal h2, #storage-modal h3,
+      #trade-modal h1, #trade-modal h2, #trade-modal h3,
+      #panel-trade h3, #panel-crew h3 {
+        color: #d4a040 !important;
+        border-bottom: 1px solid #d4a040 !important;
+        padding-bottom: 5px !important;
+        margin-bottom: 10px !important;
+      }
+      
+      #df-modal-name {
+        color: #d4a040 !important;
+      }
+
+      /* 3. КНОПКИ (DF-стиль: черный + желтый) */
       button, .btn, .build-btn, #hire-priest-btn {
-        background: linear-gradient(180deg, #5a3a22 0%, #3a2010 100%) !important;
-        background-image: 
-          repeating-linear-gradient(90deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 4px),
-          linear-gradient(180deg, #5a3a22 0%, #3a2010 100%) !important;
-        border: 2px solid #1a1008 !important;
-        color: #f0dcc0 !important; /* Светлое дерево */
+        background: #000000 !important;
+        background-image: none !important;
+        border: 2px solid #d4a040 !important;
+        color: #d4a040 !important;
         text-transform: uppercase !important;
         font-weight: bold !important;
         letter-spacing: 1px !important;
-        border-radius: 2px !important;
+        border-radius: 0 !important;
         padding: 8px 12px !important;
         cursor: pointer !important;
-        box-shadow: 
-          inset 0 2px 0 rgba(255,255,255,0.15), 
-          inset 0 -3px 0 rgba(0,0,0,0.6),
-          0 2px 4px rgba(0,0,0,0.5) !important;
+        box-shadow: inset 0 0 10px rgba(0,0,0,0.8) !important;
         transition: all 0.1s ease !important;
       }
       button:hover, .build-btn:hover, #hire-priest-btn:hover {
-        background: linear-gradient(180deg, #6a4a32 0%, #4a2a14 100%) !important;
-        color: #fff0e0 !important;
+        background: #1a1008 !important;
+        color: #ffd860 !important;
+        border-color: #ffd860 !important;
       }
       button:active {
-        box-shadow: 
-          inset 0 3px 5px rgba(0,0,0,0.8),
-          inset 0 -1px 0 rgba(255,255,255,0.05) !important;
+        
         transform: translateY(1px) !important;
       }
 
-      /* 4. ВКЛАДКИ (Тёмное дерево) */
+      /* 3.5 КАРТОЧКИ В АРТЕЛИ (DF-стиль: чёрные с жёлтой рамкой) */
+      .npc-card {
+        background: #000000 !important;
+        border: 1px solid #d4a040 !important;
+      }
+
+      /* 4. ВКЛАДКИ (DF-стиль) */
       .tab-btn, .df-main-tab, .df-sub-tab {
-        background: #1a1008 !important;
-        border: 1px solid #3a2010 !important;
-        color: #a08060 !important;
-        border-radius: 2px 2px 0 0 !important;
+        background: #000000 !important;
+        border: 1px solid #4a3520 !important;
+        color: #8a7a5a !important;
+        border-radius: 0 !important;
       }
       .tab-btn.active, .df-main-tab.active, .df-sub-tab.active {
-        background: #3a2010 !important;
-        color: #f0dcc0 !important;
-        border-bottom: 2px solid #e8d8c0 !important;
+        background: #1a1008 !important;
+        color: #d4a040 !important;
+        border: 1px solid #d4a040 !important;
+        border-bottom: 2px solid #d4a040 !important;
       }
+
+      #btn-history { display: none !important; }
 
       /* 6. ИСПРАВЛЕНИЕ ИКОНОК И ВКЛАДОК */
       img {
@@ -111,7 +126,7 @@
       /* 5. СКРОЛЛБАР (Тёмное железо) */
       ::-webkit-scrollbar { width: 10px !important; }
       ::-webkit-scrollbar-track { background: #111 !important; }
-      ::-webkit-scrollbar-thumb { background: #3a3a40 !important; border: 1px solid #1a1a20 !important; border-radius: 2px !important; }
+      ::-webkit-scrollbar-thumb { background: #3a3a40 !important; border: 1px solid #1a1a20 !important; border-radius: 0 !important; }
     `;
     document.head.appendChild(style);
     console.log('[UI Theme] Стили "Дерево и Железо" применены.');
@@ -137,6 +152,35 @@ setTimeout(() => {
     `;
     document.head.appendChild(style);
 }, 1000);
+
+// БЛОКИРОВКА NEW GAME пока моды грузятся
+setTimeout(() => {
+  const btnStart = document.getElementById('btn-start');
+  const btnContinue = document.getElementById('btn-continue');
+  const btnHistory = document.getElementById('btn-history');
+  if (!btnStart) return;
+  
+  const origOnClick = btnStart.onclick;
+  const origContinue = btnContinue ? btnContinue.onclick : null;
+  const origHistory = btnHistory ? btnHistory.onclick : null;
+  
+  btnStart.disabled = true;
+  btnStart.style.opacity = '0.4';
+  btnStart.style.cursor = 'wait';
+  btnStart.innerText = 'Загрузка модов...';
+  
+  if (btnContinue) { btnContinue.disabled = true; btnContinue.style.opacity = '0.4'; }
+  if (btnHistory) { btnHistory.disabled = true; btnHistory.style.opacity = '0.4'; }
+  
+  setTimeout(() => {
+    btnStart.disabled = false;
+    btnStart.style.opacity = '1';
+    btnStart.style.cursor = 'pointer';
+    btnStart.innerText = 'New Game';
+    if (btnContinue) { btnContinue.disabled = false; btnContinue.style.opacity = '1'; }
+    if (btnHistory) { btnHistory.disabled = false; btnHistory.style.opacity = '1'; }
+  }, 2500);
+}, 100);
 
 // ЗАЩИТА ОТ ПЕРЕКРЫТИЯ МОДАЛОК
 setTimeout(() => {

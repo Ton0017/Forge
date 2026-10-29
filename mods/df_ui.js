@@ -1,15 +1,15 @@
 setTimeout(() => {
   const modal = document.createElement('div');
   modal.id = 'df-character-modal';
-  modal.style.cssText = 'display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(10,10,15,0.95); z-index:1000000; flex-direction:column; color:#c9c4b4; font-family:"Courier New", monospace; padding:10px;';
+  modal.style.cssText = 'display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(10,10,15,0.95); z-index:1000000; flex-direction:column; font-family:"Courier New", monospace; padding:10px;';
   
   const mainTabsDiv = document.createElement('div');
   mainTabsDiv.style.cssText = 'display:flex; gap:2px; margin-bottom:5px;';
   mainTabsDiv.innerHTML = `
-    <button class="df-main-tab active" data-tab="overview" style="flex:1; background:#2a221c; border:1px solid #5a4d32; color:#c9c4b4; padding:5px; font-size:12px;">Просмотр</button>
-    <button class="df-main-tab" data-tab="health" style="flex:1; background:#1e1a16; border:1px solid #3a3528; color:#a09080; padding:5px; font-size:12px;">Здоровье</button>
-    <button class="df-main-tab" data-tab="skills" style="flex:1; background:#1e1a16; border:1px solid #3a3528; color:#a09080; padding:5px; font-size:12px;">Умения</button>
-    <button class="df-main-tab" data-tab="labor" style="flex:1; background:#1e1a16; border:1px solid #3a3528; color:#a09080; padding:5px; font-size:12px;">Работа</button>
+    <button class="df-main-tab active" data-tab="overview" style="flex:1; padding:5px; font-size:12px;">Просмотр</button>
+    <button class="df-main-tab" data-tab="health" style="flex:1; padding:5px; font-size:12px;">Здоровье</button>
+    <button class="df-main-tab" data-tab="skills" style="flex:1; padding:5px; font-size:12px;">Умения</button>
+    <button class="df-main-tab" data-tab="labor" style="flex:1; padding:5px; font-size:12px;">Работа</button>
   `;
   modal.appendChild(mainTabsDiv);
 
@@ -22,18 +22,18 @@ setTimeout(() => {
   subTabsDiv.id = 'df-sub-tabs';
   subTabsDiv.style.cssText = 'display:flex; gap:2px; margin-bottom:10px;';
   subTabsDiv.innerHTML = `
-    <button class="df-sub-tab active" data-subtab="thoughts" style="flex:1; background:#1e1a16; border:1px solid #5a4d32; color:#c87b32; padding:4px; font-size:11px;">Мысли</button>
-    <button class="df-sub-tab" data-subtab="personality" style="flex:1; background:#12100e; border:1px solid #3a3528; color:#7a6b4a; padding:4px; font-size:11px;">Грани</button>
-    <button class="df-sub-tab" data-subtab="values" style="flex:1; background:#12100e; border:1px solid #3a3528; color:#7a6b4a; padding:4px; font-size:11px;">Ценности</button>
-    <button class="df-sub-tab" data-subtab="needs" style="flex:1; background:#12100e; border:1px solid #3a3528; color:#7a6b4a; padding:4px; font-size:11px;">Нужды</button>
-    <button class="df-sub-tab" data-subtab="memory" style="flex:1; background:#12100e; border:1px solid #3a3528; color:#7a6b4a; padding:4px; font-size:11px;">Память</button>
-    <button class="df-sub-tab" data-subtab="relations" style="flex:1; background:#12100e; border:1px solid #3a3528; color:#7a6b4a; padding:4px; font-size:11px;">Отношения</button>
+    <button class="df-sub-tab active" data-subtab="thoughts" style="flex:1; color:#c87b32; padding:4px; font-size:11px;">Мысли</button>
+    <button class="df-sub-tab" data-subtab="personality" style="flex:1; background:#12100e; color:#7a6b4a; padding:4px; font-size:11px;">Грани</button>
+    <button class="df-sub-tab" data-subtab="values" style="flex:1; background:#12100e; color:#7a6b4a; padding:4px; font-size:11px;">Ценности</button>
+    <button class="df-sub-tab" data-subtab="needs" style="flex:1; background:#12100e; color:#7a6b4a; padding:4px; font-size:11px;">Нужды</button>
+    <button class="df-sub-tab" data-subtab="memory" style="flex:1; background:#12100e; color:#7a6b4a; padding:4px; font-size:11px;">Память</button>
+    <button class="df-sub-tab" data-subtab="relations" style="flex:1; background:#12100e; color:#7a6b4a; padding:4px; font-size:11px;">Отношения</button>
   `;
   modal.appendChild(subTabsDiv);
 
   const content = document.createElement('div');
   content.id = 'df-modal-content';
-  content.style.cssText = 'flex:1; overflow-y:auto; background:#12100e; border:1px solid #3a3528; padding:10px; font-size:13px; line-height:1.5;';
+  content.style.cssText = 'flex:1; overflow-y:auto; background:#12100e; padding:10px; font-size:13px; line-height:1.5;';
   modal.appendChild(content);
   document.body.appendChild(modal);
 
@@ -64,7 +64,12 @@ setTimeout(() => {
     if (!npc) return;
     currentNpc = npc;
     try {
-      const profName = (npc.profession && npc.profession.name) ? npc.profession.name : 'Странник';
+      let profName = (npc.profession && npc.profession.name) ? npc.profession.name : 'Странник';
+      if (npc.isChild) {
+          profName = 'Ребёнок, ' + Math.floor(npc.age || 0) + ' лет';
+      } else if (npc.age !== undefined) {
+          profName += ', ' + Math.floor(npc.age) + ' лет';
+      }
       document.getElementById('df-modal-name').innerText = (npc.name || 'Безымянный') + ' (' + profName + ')';
     } catch(e) {
       console.error('[df_ui] ошибка при установке имени:', e);
@@ -109,9 +114,9 @@ setTimeout(() => {
         
         // ВЫВОДИМ ЛЕТОПИСЬ (если она есть)
         if (npc.profile && npc.profile.text) {
-            html += `<div style="background:#1e1a16; padding:10px; border:1px solid #3a3528; border-radius:4px; margin-bottom:15px; font-size:12px; line-height:1.6; color:#c8c8b8;">${npc.profile.text}</div>`;
+            html += `<div style="padding:10px; border-radius:4px; margin-bottom:15px; font-size:12px; line-height:1.6; color:#c8c8b8;">${npc.profile.text}</div>`;
             const currentThought = window.generateAtomicThought ? window.generateAtomicThought(npc) : npc.profile.thought;
-            html += `<div style="font-style:italic; color:#a09080; margin-bottom:15px; font-size:12px;">"${currentThought}"</div>`;
+            html += `<div style="font-style:italic; margin-bottom:15px; font-size:12px;">"${currentThought}"</div>`;
         }
 
         for (let key in npc.facets) {
@@ -211,7 +216,7 @@ setTimeout(() => {
 
       el.innerHTML = `
         <h3 style="color:#c87b32; margin-bottom:10px;">Текущая задача:</h3>
-        <div style="font-size:16px; color:#c9c4b4; margin-bottom:15px;">${taskName}</div>
+        <div style="font-size:16px; margin-bottom:15px;">${taskName}</div>
         <h3 style="color:#c87b32; margin-bottom:5px;">Инвентарь:</h3>
         <div style="margin-top: 5px; color: #f0c040; margin-bottom: 5px;">Золото: ${npc.wallet || 0}</div>
         <div style="display:flex; flex-wrap:wrap; gap:5px;">
@@ -219,32 +224,11 @@ setTimeout(() => {
             let iconHtml = '';
             if (i.isEmoji) { iconHtml = `<span style="font-size:14px; width:16px; text-align:center; display:inline-block;">${i.file}</span>`; }
             else if (i.file) { iconHtml = `<img src="assets/equipment/${i.file}" style="width:14px; height:14px; image-rendering:pixelated;">`; }
-            return `<div style="background:#1a1713; border:1px solid #3a3528; padding:2px 5px; font-size:11px; display:flex; align-items:center; gap:4px;">${iconHtml}${i.name}</div>`;
+            return `<div style="background:#1a1713; padding:2px 5px; font-size:11px; display:flex; align-items:center; gap:4px;">${iconHtml}${i.name}</div>`;
           }).join('') : '<div style="color:#888;">Пусто</div>'}
         </div>
       `;
     }
   }
 
-  const originalRenderCrew = window.renderCrew;
-  window.renderCrew = function() {
-    originalRenderCrew();
-    const list = document.getElementById('crew-list');
-    if (!list) return;
-    Array.from(list.children).forEach(card => {
-      card.onclick = (e) => {
-        if (e) e.stopPropagation(); // Останавливаем пробой клика
-        const nameEl = card.querySelector('.name');
-        if (!nameEl) return;
-        const nameText = nameEl.innerText.split(' (')[0];
-        const npc = state.npcs.find(n => n.name === nameText);
-        if (npc) {
-          window.selectedNpcId = npc.id;
-          closePanels();
-          renderMap();
-          window.openCharacterSheet(npc);
-        }
-      };
-    });
-  };
 }, 2000);

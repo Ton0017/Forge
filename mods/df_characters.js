@@ -41,12 +41,29 @@ Reg.df = {
     const selectedTrait = this.traits[window._traitIdx % this.traits.length];
     window._traitIdx++;
 
+    // ПОЛ И ВОЗРАСТ
+    const _gender = Math.random() < 0.5 ? 'male' : 'female';
+    const _age = 20 + Math.floor(Math.random() * 20); // 20-40 лет
+
+    // Скин по полу (женские спрайты из папки)
+    let _finalSkin = sk;
+    if (_gender === 'female' && Reg.assets && Reg.assets.skins) {
+      if (Reg.assets.skins.includes('commoner man woman.png')) _finalSkin = 'commoner man woman.png';
+      else if (Reg.assets.skins.includes('man woman 1.png')) _finalSkin = 'man woman 1.png';
+    }
+
     return {
       name: pick(this.names) + ' ' + pick(this.surnames),
       profession: p,
       trait: selectedTrait,
       habit: pick(this.habits),
-      skinFile: sk,
+      skinFile: _finalSkin,
+      gender: _gender,
+      age: _age,
+      familyNeed: 0,
+      pregnancy: 0,
+      children: [],
+      isChild: false,
       hp: 100, maxHp: 100,
       hunger: 20, maxHunger: 100
     };

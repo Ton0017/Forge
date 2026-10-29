@@ -159,6 +159,7 @@ setTimeout(() => {
       
       const card = document.createElement('div');
       card.className = 'npc-card';
+      card.setAttribute('data-id', npc.id);
       if (isDead) card.style.opacity = '0.6';
       if (npc.id === window.selectedNpcId) card.style.borderColor = '#fff';
 
@@ -224,6 +225,17 @@ setTimeout(() => {
       const canvas = card.querySelector('.npc-face');
       if (canvas) drawNpcFace(canvas, npc);
 
+      card.onclick = (e) => {
+        if (e) e.stopPropagation();
+        const npcId = card.getAttribute('data-id');
+        const npc = state.npcs.find(n => n.id === npcId);
+        if (npc) {
+          window.selectedNpcId = npc.id;
+          if (window.closePanels) window.closePanels();
+          if (window.renderMap) window.renderMap();
+          if (window.openCharacterSheet) window.openCharacterSheet(npc);
+        }
+      };
       list.appendChild(card);
     }
   };

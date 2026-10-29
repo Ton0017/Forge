@@ -38,10 +38,20 @@ Reg.on('tile_dug', (cell, npc, state) => {
   // ГРИБЫ (Глубина 2+, шанс 6%)
   if (depth >= 2 && r >= 0.04 && r < 0.10) {
     cell.type = 'mushroom';
+    if (!cell.items) cell.items = [];
+    // 50% шанс на траву
     if (Math.random() < 0.5) {
-        if (!cell.items) cell.items = [];
         const herb = (typeof window.createItem === 'function') ? window.createItem('herb') : { name: 'Лечебная трава', type: 'misc', tags: ['herb', 'medical'] };
         cell.items.push(herb);
+    }
+    // 30% шанс на семена (1-2 шт)
+    if (Math.random() < 0.3) {
+        const seedCount = 1 + Math.floor(Math.random() * 2);
+        for (let si = 0; si < seedCount; si++) {
+            if (typeof window.createItem === 'function') {
+                cell.items.push(window.createItem('seeds'));
+            }
+        }
     }
     Reg.log(`[Событие] В камне оказалась пустота, заросшая светящимися грибами.`, 'sys');
     return;
@@ -54,8 +64,14 @@ Reg.on('tile_dug', (cell, npc, state) => {
     return;
   }
 
-  // РУДА (Глубина 3+, шанс 8%)
-  if (depth >= 3 && r >= 0.14 && r < 0.22) {
+  // УГОЛЬНАЯ ЖИЛА (Глубина 2+, шанс 6%)
+  if (depth >= 2 && r >= 0.14 && r < 0.20) {
+    cell.type = 'coal_ore';
+    return;
+  }
+
+  // РУДА (Глубина 1+, шанс 20%)
+  if (depth >= 1 && r >= 0.20 && r < 0.40) {
     cell.type = 'ore';
     return;
   }

@@ -59,6 +59,7 @@
       // 1. Базовые товары (еда нужна всем)
       possibleGoods.push({ name: 'Паёк', basePrice: 15, type: 'food', amount: 10, file: 'assets/objects/закуски.png' });
       possibleGoods.push({ name: 'Сырое мясо', basePrice: 10, type: 'food', amount: 5, spawnTag: 'meat', file: 'assets/animals/boar.png' });
+      possibleGoods.push({ name: 'Семена пшеницы', basePrice: 5, type: 'resource', spawnTag: 'seeds', file: 'assets/icons/53 question trap.png' });
       
       // 2. Паранойя -> привозит защиту
       if (facets.paranoia > 40) {
@@ -345,7 +346,7 @@ function evaluateDeal(trader, items, availableItems) {
             car.gold -= evalRes.offerGold; state.gold += evalRes.offerGold; car.mood += 20;
             offerItems.forEach(item => {
               for (let k in state.cells) { const c = state.cells[k]; if (c.items) { const i = c.items.findIndex(x => x === item); if (i >= 0) { c.items.splice(i, 1); continue; } } }
-              state.npcs.forEach(npc => { if (!npc.alive) return; if (npc.inventory) { const i = npc.inventory.findIndex(x => x === item); if (i >= 0) npc.inventory.splice(i, 1); } if (npc.equipment) ['weapon','armor','accessory'].forEach(slot => { if (npc.equipment[slot] === item) { npc.equipment[slot] = null; if (slot === 'weapon') npc.weapon = null; } }); });
+              state.npcs.forEach(npc => { if (!npc.alive) return; if (npc.inventory) { const i = npc.inventory.findIndex(x => x === item); if (i >= 0) npc.inventory.splice(i, 1); } if (npc.equipment) ['weapon','armor','accessory'].forEach(slot => { if (npc.equipment[slot] === item) { npc.equipment[slot] = null;  } }); });
             });
             car.lastSpeech = generateSpeech(car, 'accept', { item: offerItems[0].name }); Reg.log(`[Караван] Сделка: ${offerItems[0].name}.`, 'good');
             if (window.renderUI) window.renderUI();

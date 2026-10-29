@@ -1,4 +1,8 @@
 (function(){
+  let _gameState = null;
+  Reg.on('world_init', (s) => { _gameState = s; });
+  Reg.on('tick', (s) => { _gameState = s; });
+
   setTimeout(() => {
     const forgePanel = document.getElementById('panel-forge');
     if (!forgePanel) return;
@@ -19,6 +23,53 @@
       </button>
     `;
     forgePanel.appendChild(container);
+
+    // === БЛОК КРАФТА (автоматически из CRAFTABLES) ===
+    const craftContainer = document.createElement('div');
+    craftContainer.id = 'forge-craft-content';
+    craftContainer.style.cssText = 'display:flex; flex-direction:column; gap:6px; margin-top:15px;';
+    forgePanel.appendChild(craftContainer);
+
+    function refreshCraftUI() {
+        if (!window.CRAFTABLES) {
+            craftContainer.innerHTML = '<div style="color:#a83838;">Реестр крафта не загружен.</div>';
+            return;
+        }
+        const _s = _gameState;
+        if (!_s) {
+            craftContainer.innerHTML = '<div style="color:#888;">Загрузка...</div>';
+            setTimeout(refreshCraftUI, 500);
+            return;
+        }
+        
+        const names = { iron_ore: 'руда', wood: 'бревно', coal: 'уголь', cloth: 'ткань', stone: 'камень' };
+        let html = '<h3 style="color:#d4a040; margin-bottom:8px; border-bottom:1px solid #d4a040; padding-bottom:3px;">Крафт</h3>';
+        for (let id in window.CRAFTABLES) {
+            const r = window.CRAFTABLES[id];
+            const queued = (_s.craftQueue || []).find(j => j.id === id);
+            const queueCount = queued ? queued.count : 0;
+            let costStr = [];
+            for (let res in r.cost) {
+                costStr.push(r.cost[res] + ' ' + (names[res] || res));
+            }
+            const badge = queueCount > 0 ? `<span style="color:#ffd860; font-size:11px;">[в очереди: ${queueCount}]</span>` : '';
+            html += `<button class="craft-btn" data-id="${id}" style="width:100%; padding:8px; background:#0a0a0a; border:1px solid #d4a040; color:#d4a040; cursor:pointer; text-align:left; font-family:Georgia; display:flex; justify-content:space-between; align-items:center;">
+              <span>${r.name}</span>
+              <span style="color:#a08060; font-size:11px;">${costStr.join(', ')} ${badge}</span>
+            </button>`;
+        }
+        craftContainer.innerHTML = html;
+        craftContainer.querySelectorAll('.craft-btn').forEach(btn => {
+            btn.onclick = () => {
+                const id = btn.getAttribute('data-id');
+                if (window.addToCraftQueue && window.addToCraftQueue(id)) {
+                    Reg.log(`[Кузня] Заказ: ${window.CRAFTABLES[id].name}.`, 'sys');
+                    refreshCraftUI();
+                }
+            };
+        });
+    }
+    refreshCraftUI();
 
     // ФУНКЦИЯ ПОИСКА СВОБОДНОГО МЕСТА (Сначала у наковальни, потом где угодно)
     function findFreeSpot() {

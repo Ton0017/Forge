@@ -55,6 +55,10 @@
     };
     
     if (!s.npcs) s.npcs = [];
+    priest.facets = { aggression: 20, bravery: 60, sociality: 50, curiosity: 50, altruism: 80, anxiety: 30, greed: 10 };
+    priest.emo = { stress: 0, joy: 50, fear: 0, drunk: 0 };
+    priest.inventory = [];
+    priest.equipment = { weapon: null, armor: null, accessory: null };
     s.npcs.push(priest);
     
     Reg.log(`[Найм] Странствующий Жрец прибыл в шахту.`, 'good');

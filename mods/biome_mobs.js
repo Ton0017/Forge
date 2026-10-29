@@ -110,6 +110,7 @@
     const r = () => Math.floor(Math.random()*101);
     const p = {
       id, name:stats.name, meat:stats.meat, hp:stats.hp, maxHp:stats.hp, dmg:stats.dmg,
+      sprite: stats.sprite || (id + '.png'),
       mass: stats.mass || 10, size: stats.size || 2, // <--- ДОБАВЛЯЕМ МАССУ И РАЗМЕР
       draw: Reg.tiles[id],
       facets:{}, physical: PHYS[Math.floor(Math.random()*PHYS.length)],

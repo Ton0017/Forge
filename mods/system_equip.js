@@ -10,7 +10,7 @@
       if (wIdx !== -1) {
         const weapon = npc.inventory.splice(wIdx, 1)[0];
         npc.equipment.weapon = weapon;
-        npc.weapon = { id: 'equipped', name: weapon.name, damage: weapon.dmgMod };
+        // npc.weapon убран, используем npc.equipment.weapon
         Reg.log(`${npc.name} берет в руки ${weapon.name}.`, 'sys');
         return true;
       }

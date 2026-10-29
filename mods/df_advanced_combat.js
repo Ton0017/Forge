@@ -180,7 +180,7 @@
         if (wPart && wPart.hp <= 0) {
           Reg.log(`[ПОЛОМКА] ${npc.name} сломал ${weaponInfo.item.name}! ${wPart.name} разлетелось на осколки.`, 'combat');
           npc.equipment.weapon = null;
-          npc.weapon = null;
+          if(npc.equipment) npc.equipment.weapon = null;
           
           // ФИЗИКА ШРАПНЕЛИ: 3-5 осколков разлетаются
           const pieces = 3 + Math.floor(Math.random() * 3);
@@ -246,16 +246,27 @@
     if (isDead) {
       Reg.log(`${target.name} падает замертво!`, 'good');
       const cell = getCell(target.x, target.y);
-      if (target.isAnimal && cell) {
-          if (!cell.items) cell.items = [];
-          let meatCount = target.meat || 1;
-          for(let i=0; i<meatCount; i++) {
-              cell.items.push({ name: 'Сырое мясо', type: 'food', tags: ['meat', 'raw'], file: 'assets/animals/boar.png' });
-          }
-      }
       if (cell) {
-        if (target.isAnimal) { cell.animal = null; cell.type = target.baseType || 'floor'; }
-        else { cell.monster = null; }
+        // Создаём труп (можно съесть при диком голоде)
+        if (!cell.corpse) {
+          cell.corpse = {
+            name: target.name,
+            sprite: target.sprite || (target.isAnimal ? 'boar.png' : 'skeleton sword.png'),
+            isDwarf: false
+          };
+        }
+        // Для животных — дропаем мясо (можно готовить)
+        if (target.isAnimal) {
+            if (!cell.items) cell.items = [];
+            let meatCount = target.meat || 1;
+            for(let i=0; i<meatCount; i++) {
+                cell.items.push({ name: 'Сырое мясо', type: 'food', tags: ['meat', 'raw'], file: 'assets/animals/boar.png' });
+            }
+            cell.animal = null;
+            cell.type = target.baseType || 'floor';
+        } else {
+            cell.monster = null;
+        }
       }
       npc.task = { type: 'idle', path: [] };
       return;

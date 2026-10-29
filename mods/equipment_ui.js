@@ -38,7 +38,8 @@
       content.style.overflowY = 'auto';
       content.style.maxHeight = 'calc(80vh - 100px)';
 
-      const e = npc.equipment || { weapon: null, armor: null, accessory: null };
+      if (!npc.equipment) npc.equipment = { weapon: null, armor: null, accessory: null };
+      const e = npc.equipment;
       const inv = npc.inventory || [];
 
       // Принудительный скролл для этой вкладки
@@ -54,8 +55,8 @@
         let imgSrc = item.file ? 'assets/equipment/' + item.file : 'assets/equipment/' + item.name + '.png';
         
         let color = '#e0d8c8';
-        if (item.tags.includes('magic')) color = '#a030a0';
-        if (item.tags.includes('fire')) color = '#e05030';
+        if (item.tags && item.tags.includes('magic')) color = '#a030a0';
+        if (item.tags && item.tags.includes('fire')) color = '#e05030';
 
         return `<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
            <img src="${imgSrc}" style="width:32px; height:32px; image-rendering:pixelated; background:rgba(0,0,0,0.3); border:1px solid #3a3528;" onerror="this.style.display='none'">

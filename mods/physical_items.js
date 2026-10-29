@@ -80,7 +80,7 @@
         if (!canEquip) {
           npc.inventory.push(itemToTake); 
         } else if (itemToTake.type === 'weapon') {
-          npc.weapon = { id: 'equipped', name: itemToTake.name, damage: itemToTake.dmgMod };
+          // npc.weapon убран, используем npc.equipment.weapon
         }
 
         // ПРЕДМЕТ ПОДОБРАН — теперь дварф решает, что с ним делать

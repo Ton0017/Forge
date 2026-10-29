@@ -1,0 +1,229 @@
+setTimeout(() => {
+  const modal = document.createElement('div');
+  modal.id = 'df-character-modal';
+  modal.style.cssText = 'display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(10,10,15,0.95); z-index:1000000; flex-direction:column; color:#c9c4b4; font-family:"Courier New", monospace; padding:10px;';
+  
+  const mainTabsDiv = document.createElement('div');
+  mainTabsDiv.style.cssText = 'display:flex; gap:2px; margin-bottom:5px;';
+  mainTabsDiv.innerHTML = `
+    <button class="df-main-tab active" data-tab="overview" style="flex:1; background:#2a221c; border:1px solid #5a4d32; color:#c9c4b4; padding:5px; font-size:12px;">Просмотр</button>
+    <button class="df-main-tab" data-tab="health" style="flex:1; background:#1e1a16; border:1px solid #3a3528; color:#a09080; padding:5px; font-size:12px;">Здоровье</button>
+    <button class="df-main-tab" data-tab="skills" style="flex:1; background:#1e1a16; border:1px solid #3a3528; color:#a09080; padding:5px; font-size:12px;">Умения</button>
+    <button class="df-main-tab" data-tab="labor" style="flex:1; background:#1e1a16; border:1px solid #3a3528; color:#a09080; padding:5px; font-size:12px;">Работа</button>
+  `;
+  modal.appendChild(mainTabsDiv);
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex; justify-content:space-between; border-bottom:2px solid #5a4d32; padding-bottom:5px; margin-bottom:10px;';
+  header.innerHTML = '<h2 id="df-modal-name" style="color:#c87b32; font-size:16px;"></h2><button onclick="document.getElementById(\'df-character-modal\').style.display=\'none\'" style="background:#a83838; border:1px solid #ff8888; color:#fff; padding:2px 10px; border-radius:4px; font-family:inherit;">X</button>';
+  modal.appendChild(header);
+
+  const subTabsDiv = document.createElement('div');
+  subTabsDiv.id = 'df-sub-tabs';
+  subTabsDiv.style.cssText = 'display:flex; gap:2px; margin-bottom:10px;';
+  subTabsDiv.innerHTML = `
+    <button class="df-sub-tab active" data-subtab="thoughts" style="flex:1; background:#1e1a16; border:1px solid #5a4d32; color:#c87b32; padding:4px; font-size:11px;">Мысли</button>
+    <button class="df-sub-tab" data-subtab="personality" style="flex:1; background:#12100e; border:1px solid #3a3528; color:#7a6b4a; padding:4px; font-size:11px;">Грани</button>
+    <button class="df-sub-tab" data-subtab="values" style="flex:1; background:#12100e; border:1px solid #3a3528; color:#7a6b4a; padding:4px; font-size:11px;">Ценности</button>
+    <button class="df-sub-tab" data-subtab="needs" style="flex:1; background:#12100e; border:1px solid #3a3528; color:#7a6b4a; padding:4px; font-size:11px;">Нужды</button>
+    <button class="df-sub-tab" data-subtab="memory" style="flex:1; background:#12100e; border:1px solid #3a3528; color:#7a6b4a; padding:4px; font-size:11px;">Память</button>
+    <button class="df-sub-tab" data-subtab="relations" style="flex:1; background:#12100e; border:1px solid #3a3528; color:#7a6b4a; padding:4px; font-size:11px;">Отношения</button>
+  `;
+  modal.appendChild(subTabsDiv);
+
+  const content = document.createElement('div');
+  content.id = 'df-modal-content';
+  content.style.cssText = 'flex:1; overflow-y:auto; background:#12100e; border:1px solid #3a3528; padding:10px; font-size:13px; line-height:1.5;';
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+
+  let currentNpc = null;
+  let activeMainTab = 'overview';
+  let activeSubTab = 'thoughts';
+
+  document.querySelectorAll('.df-main-tab').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.df-main-tab').forEach(b => { b.style.background = '#1e1a16'; b.style.color = '#a09080'; b.style.border = '1px solid #3a3528'; });
+      btn.style.background = '#2a221c'; btn.style.color = '#c9c4b4'; btn.style.border = '1px solid #5a4d32';
+      activeMainTab = btn.dataset.tab;
+      document.getElementById('df-sub-tabs').style.display = (activeMainTab === 'overview') ? 'flex' : 'none';
+      renderContent(currentNpc);
+    };
+  });
+
+  document.querySelectorAll('.df-sub-tab').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.df-sub-tab').forEach(b => { b.style.background = '#12100e'; b.style.color = '#7a6b4a'; b.style.border = '1px solid #3a3528'; });
+      btn.style.background = '#1e1a16'; btn.style.color = '#c87b32'; btn.style.border = '1px solid #5a4d32';
+      activeSubTab = btn.dataset.subtab;
+      renderContent(currentNpc);
+    };
+  });
+
+  window.openCharacterSheet = function(npc) {
+    if (!npc) return;
+    currentNpc = npc;
+    try {
+      const profName = (npc.profession && npc.profession.name) ? npc.profession.name : 'Странник';
+      document.getElementById('df-modal-name').innerText = (npc.name || 'Безымянный') + ' (' + profName + ')';
+    } catch(e) {
+      console.error('[df_ui] ошибка при установке имени:', e);
+    }
+    modal.style.display = 'flex';
+    activeMainTab = 'overview';
+    activeSubTab = 'thoughts';
+    document.getElementById('df-sub-tabs').style.display = 'flex';
+    try {
+      renderContent(npc);
+    } catch(e) {
+      console.error('[df_ui] ошибка в renderContent:', e);
+      const el = document.getElementById('df-modal-content');
+      if (el) el.innerHTML = '<div style="color:#a83838; padding:10px;">Ошибка отображения карточки: ' + (e.message || e) + '</div>';
+    }
+  };
+
+  function renderContent(npc) {
+    const el = document.getElementById('df-modal-content');
+    if (!npc || !npc.memory) { el.innerHTML = 'Данные не загружены.'; return; }
+    
+    if (activeMainTab === 'overview') {
+      if (activeSubTab === 'thoughts') {
+        let html = '';
+        if (npc.isInMood) {
+            html += `<div style="background:#a83838; color:#fff; padding:5px; margin-bottom:10px; font-weight:bold; border-radius:4px; text-align:center;">ОДЕРЖИМ! Требует: ${npc.moodNeed === 'iron_ore' ? 'Руду' : 'Материал'}</div>`;
+        }
+        html += '<h3 style="color:#c87b32; margin-bottom:10px;">Последние мысли:</h3>';
+        if (npc.memory.shortTerm.length === 0) html += '<div>Голова пуста.</div>';
+        else {
+          npc.memory.shortTerm.forEach(m => {
+            if (!m || !m.text) return;
+            const emoType = (m.emotion && m.emotion.type) ? m.emotion.type : 'neutral';
+            let color = (emoType === 'joy' || emoType === 'awe') ? '#7aba7a' : (emoType === 'fear' ? '#a83838' : '#c9c4b4');
+            html += `<div style="margin-bottom:6px; border-bottom:1px solid #2a221c; padding-bottom:4px; color:${color};">- ${m.text}</div>`;
+          });
+        }
+        el.innerHTML = html;
+      }
+      else if (activeSubTab === 'personality') {
+        let html = '<h3 style="color:#c87b32; margin-bottom:10px;">Грани личности:</h3>';
+        
+        // ВЫВОДИМ ЛЕТОПИСЬ (если она есть)
+        if (npc.profile && npc.profile.text) {
+            html += `<div style="background:#1e1a16; padding:10px; border:1px solid #3a3528; border-radius:4px; margin-bottom:15px; font-size:12px; line-height:1.6; color:#c8c8b8;">${npc.profile.text}</div>`;
+            const currentThought = window.generateAtomicThought ? window.generateAtomicThought(npc) : npc.profile.thought;
+            html += `<div style="font-style:italic; color:#a09080; margin-bottom:15px; font-size:12px;">"${currentThought}"</div>`;
+        }
+
+        for (let key in npc.facets) {
+          const val = npc.facets[key];
+          html += `
+            <div style="margin-bottom:8px;">
+              <div style="display:flex; justify-content:space-between; font-size:11px;"><span>${Reg.facetNames[key] || key}</span><span>${val}/100</span></div>
+              <div style="width:100%; height:6px; background:#000; border:1px solid #333; margin-top:2px;"><div style="width:${val}%; height:100%; background:${val > 50 ? '#c87b32' : '#5a4d32'};"></div></div>
+            </div>`;
+        }
+        el.innerHTML = html;
+      }
+      else if (activeSubTab === 'values') {
+        let html = '<h3 style="color:#c87b32; margin-bottom:10px;">Ценности и убеждения:</h3>';
+        for (let key in npc.values) {
+          const val = npc.values[key];
+          html += `
+            <div style="margin-bottom:8px;">
+              <div style="display:flex; justify-content:space-between; font-size:11px;"><span>${Reg.valueNames[key] || key}</span><span>${val.toFixed(1)}</span></div>
+              <div style="width:100%; height:6px; background:#000; border:1px solid #333; margin-top:2px;"><div style="width:${(val + 50)}%; height:100%; background:${val > 0 ? '#7aba7a' : '#a83838'};"></div></div>
+            </div>`;
+        }
+        el.innerHTML = html;
+      }
+      else if (activeSubTab === 'needs') {
+        el.innerHTML = `
+          <h3 style="color:#c87b32; margin-bottom:15px;">Текущие нужды:</h3>
+          <div style="margin-bottom:10px;">Усталость: ${Math.floor(npc.fatigue || 0)}/100</div>
+          <div style="margin-bottom:10px; color: ${npc.thirst > 60 ? '#a83838' : '#c9c4b4'};">Жажда: ${Math.floor(npc.thirst || 0)}/100</div>
+          <div style="margin-bottom:10px;">Потребность в общении: ${Math.floor(npc.socialNeed || 0)}/100</div>
+          <div style="margin-bottom:10px;">Семья: ${Math.floor(npc.needs ? npc.needs.family : 0)}/100</div>
+          <div style="margin-bottom:10px;">Признание: ${Math.floor(npc.needs ? npc.needs.recognition : 0)}/100</div>
+        `;
+      }
+      else if (activeSubTab === 'relations') {
+        let html = '<h3 style="color:#c87b32; margin-bottom:10px;">Отношения с коллегами:</h3>';
+        if (!npc.relations || Object.keys(npc.relations).length === 0) html += '<div>Он пока ни с кем не общался.</div>';
+        else {
+          for (let id in npc.relations) {
+            const other = state.npcs.find(n => n.id === id);
+            if (other && other.alive) {
+              const score = npc.relations[id];
+              let status = score > 10 ? 'Друг' : (score < -10 ? 'Враг' : 'Знакомый');
+              let color = score > 10 ? '#7aba7a' : (score < -10 ? '#a83838' : '#c9c4b4');
+              html += `<div style="margin-bottom:5px;">${other.name}: <span style="color:${color}">${status} (${score})</span></div>`;
+            }
+          }
+        }
+        el.innerHTML = html;
+      }
+      else if (activeSubTab === 'memory') {
+        let html = '<h3 style="color:#c87b32; margin-bottom:10px;">Долгосрочные воспоминания:</h3>';
+        if (npc.memory.longTerm.length === 0) html += '<div>Пока ничего важного не произошло.</div>';
+        else {
+          npc.memory.longTerm.forEach(m => {
+            html += `<div style="margin-bottom:8px; border-bottom:1px solid #2a221c; padding-bottom:4px;">${m.text}</div>`;
+          });
+        }
+        el.innerHTML = html;
+      }
+    }
+    
+    else if (activeMainTab === 'health') {
+      let statesHtml = '';
+      if (npc.states) {
+        for (let id in npc.states) {
+          const def = Reg.states[id];
+          if (def) statesHtml += `<div style="color:#a83838; font-weight:bold;">[${def.name}]</div>`;
+        }
+      }
+      if (!statesHtml) statesHtml = '<div style="color:#7aba7a;">Нормальное</div>';
+      
+      el.innerHTML = `
+        <h3 style="color:#c87b32; margin-bottom:10px;">Физическое состояние:</h3>
+        <div style="margin-bottom:15px;">Здоровье (HP): ${Math.floor(npc.hp)} / ${npc.maxHp}</div>
+        <h3 style="color:#c87b32; margin-bottom:5px;">Активные состояния:</h3>
+        ${statesHtml}
+      `;
+    }
+
+    else if (activeMainTab === 'skills') {
+      if (!npc.skills) npc.skills = { mining: 0, smithing: 0, combat: 0, fishing: 0 };
+      el.innerHTML = `
+        <h3 style="color:#c87b32; margin-bottom:10px;">Профессиональные навыки:</h3>
+        <div style="margin-bottom:8px;">Копание: <span style="color:#7aba7a;">Ур. ${(npc.skills.mining || 0).toFixed(2)}</span></div>
+        <div style="margin-bottom:8px;">Кузнечное дело: <span style="color:#7aba7a;">Ур. ${(npc.skills.smithing || 0).toFixed(2)}</span></div>
+        <div style="margin-bottom:8px;">Владение оружием: <span style="color:#7aba7a;">Ур. ${(npc.skills.combat || 0).toFixed(2)}</span></div>
+        <div style="margin-bottom:8px;">Рыбалка: <span style="color:#7aba7a;">Ур. ${(npc.skills.fishing || 0).toFixed(2)}</span></div>
+      `;
+    }
+
+    else if (activeMainTab === 'labor') {
+      let taskName = 'Отдыхает';
+      if (npc.task.type === 'dig') taskName = 'Копает породу';
+      if (npc.task.type === 'fight') taskName = 'Сражается за свою жизнь';
+      if (npc.task.type === 'go_to_deposit') taskName = 'Несет руду на склад';
+
+      el.innerHTML = `
+        <h3 style="color:#c87b32; margin-bottom:10px;">Текущая задача:</h3>
+        <div style="font-size:16px; color:#c9c4b4; margin-bottom:15px;">${taskName}</div>
+        <h3 style="color:#c87b32; margin-bottom:5px;">Инвентарь:</h3>
+        <div style="margin-top: 5px; color: #f0c040; margin-bottom: 5px;">Золото: ${npc.wallet || 0}</div>
+        <div style="display:flex; flex-wrap:wrap; gap:5px;">
+          ${(npc.inventory && npc.inventory.length > 0) ? npc.inventory.map(i => {
+            let iconHtml = '';
+            if (i.isEmoji) { iconHtml = `<span style="font-size:14px; width:16px; text-align:center; display:inline-block;">${i.file}</span>`; }
+            else if (i.file) { iconHtml = `<img src="assets/equipment/${i.file}" style="width:14px; height:14px; image-rendering:pixelated;">`; }
+            return `<div style="background:#1a1713; border:1px solid #3a3528; padding:2px 5px; font-size:11px; display:flex; align-items:center; gap:4px;">${iconHtml}${i.name}</div>`;
+          }).join('') : '<div style="color:#888;">Пусто</div>'}
+        </div>
+      `;
+    }
+  }
+
+}, 2000);

@@ -40,7 +40,7 @@
       
       if (weapons.length > 0 && Math.random() < 0.5) {
         npc.equipment.weapon = weapons[Math.floor(Math.random() * weapons.length)];
-        npc.weapon = { id: 'equipped', name: npc.equipment.weapon.name, damage: npc.equipment.weapon.dmgMod };
+        // npc.weapon убран
       }
       if (armors.length > 0 && Math.random() < 0.3) {
         npc.equipment.armor = armors[Math.floor(Math.random() * armors.length)];

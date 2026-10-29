@@ -53,7 +53,7 @@
         }
       });
 
-      return { id, name, hp, dmg, biome, hostile, isAnimal: !hostile };
+      return { id, name, hp, dmg, biome, hostile, isAnimal: !hostile, sprite: filename + '.png' };
     });
 
     const POOLS = {

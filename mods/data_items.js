@@ -12,7 +12,9 @@
     meat_cooked:{ name: 'Жареное мясо',  emoji: '🍖', type: 'food', tags: ['meat', 'cooked', 'edible'], mass: 2, calories: 60, poisonChance: 0 },
     bread:      { name: 'Хлеб',          emoji: '🍞', type: 'food', tags: ['edible', 'bread'], mass: 1, calories: 40, poisonChance: 0 },
     mushroom:   { name: 'Гриб',          emoji: '🍄', type: 'food', tags: ['edible', 'mushroom'], mass: 1, calories: 15, poisonChance: 0.3 },
-    fish:       { name: 'Рыба',          emoji: '🐟', type: 'food', tags: ['fish', 'raw', 'edible'], mass: 1, calories: 25, poisonChance: 0.05 },
+    wheat:      { name: 'Пшеница',       emoji: '🌾', type: 'food', tags: ['edible', 'grain', 'wheat'], mass: 1, calories: 20, poisonChance: 0 },
+    seeds:      { name: 'Семена',        emoji: '🌱', type: 'resource', tags: ['seed', 'planting'], mass: 1 },
+    berry:      { name: 'Ягоды',        emoji: '🍒', type: 'food', tags: ['berry', 'raw', 'edible'], mass: 1, calories: 15, poisonChance: 0.05 },
     fish:       { name: 'Рыба',          emoji: '🐟', type: 'food', tags: ['fish', 'raw', 'edible'], mass: 1, calories: 25, poisonChance: 0.05 },
 
     pickaxe:    { name: 'Железная кирка',emoji: '⛏️', type: 'tool', tags: ['tool', 'pickaxe', 'metal', 'weapon'], mass: 5, hardness: 8, sharpness: 3, durability: 100 },

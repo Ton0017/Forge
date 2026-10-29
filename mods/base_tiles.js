@@ -19,6 +19,16 @@ Reg.tile('floor', (ctx, sx, sy, seed) => {
   }
 });
 
+Reg.tile('coal_ore', (ctx, sx, sy, seed) => {
+  Reg.tiles.stone(ctx, sx, sy, seed);
+  const r = _mr(seed + 2);
+  for (let i = 0; i < 10; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#1a1a1a' : '#333333';
+    const ox = Math.floor(r() * 13) * 2 + 2, oy = Math.floor(r() * 13) * 2 + 2;
+    ctx.fillRect(sx + ox, sy + oy, 2, 2);
+  }
+});
+
 Reg.tile('ore', (ctx, sx, sy, seed) => {
   Reg.tiles.stone(ctx, sx, sy, seed);
   const r = _mr(seed + 1);
