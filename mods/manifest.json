@@ -31,7 +31,6 @@
     "thought_library.js",
     "needs_system.js",
     "hub_objects.js",
-    "combat_engine.js",
     "status_engine.js",
     "base_states.js",
     "df_ui.js",

@@ -1,5 +1,4 @@
 (function(){
-  setTimeout(() => {
     Reg.combatLex = {
       // 1. ГЛАГОЛЫ (Зависят от типа оружия)
       verbs: {
@@ -69,5 +68,4 @@
     };
 
     console.log('[Combat Lexicon] Боевой лексикон загружен.');
-  }, 1000);
 })();
