@@ -425,11 +425,26 @@ function evaluateDeal(trader, items, availableItems) {
       if (buyBtn) buyBtn.onclick = () => {
         if (state.gold < 15) { car.lastSpeech = generateSpeech(car, 'no_gold', { item: 'эль', demandItem: 'золото' }); tradeTab.click(); return; }
         if (!car.booze || car.booze <= 0) { car.lastSpeech = generateSpeech(car, 'no_stock', { item: 'эль' }); tradeTab.click(); return; }
-        state.gold -= 15; car.gold += 15; car.booze -= 1;
-        let placed = false; for (let r = 2; r <= 10 && !placed; r++) for (let dx = -r; dx <= r && !placed; dx++) for (let dy = -r; dy <= r && !placed; dy++) { const cell = getCell(state.forgePos.x+dx, state.forgePos.y+dy); if (cell && cell.type === 'floor' && !cell.items && !cell.monster) { cell.type = 'beer_tap'; placed = true; } }
+        state.gold -= 15; car.gold += 15;
+        car.booze = Math.max(0, (car.booze || 0) - 1);
+        // Кладем кружку (beer_tap) на свободную клетку рядом с караваном
+        let placed = false;
+        for (let r = 2; r <= 10 && !placed; r++) {
+            for (let dx = -r; dx <= r && !placed; dx++) {
+                for (let dy = -r; dy <= r && !placed; dy++) {
+                    const cell = getCell(state.forgePos.x + dx, state.forgePos.y + dy);
+                    if (cell && cell.type === 'floor' && !cell.monster && !cell.animal) {
+                        cell.type = 'beer_tap';
+                        placed = true;
+                    }
+                }
+            }
+        }
         if (!placed) {
             if (!state.npcs[0].inventory) state.npcs[0].inventory = [];
-            state.npcs[0].inventory.push({ name: 'Эль', type: 'food', tags: ['drink'], amount: 1 });
+            if (typeof window.createItem === 'function') {
+                state.npcs[0].inventory.push(window.createItem('ale'));
+            }
         }
         tradeTab.click();
       };

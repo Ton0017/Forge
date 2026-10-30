@@ -208,7 +208,7 @@ setTimeout(() => {
             ${npc.equipment && npc.equipment.weapon ? '<span style="font-size:12px;" title="' + npc.equipment.weapon.name + '">⚔️</span>' : ''}
             ${npc.equipment && npc.equipment.armor ? '<span style="font-size:12px;" title="' + npc.equipment.armor.name + '">🛡️</span>' : ''}
         </div>
-          <div class="task">${npc.profession ? npc.profession.name : 'Странник'} | ${npc.trait ? npc.trait.name : 'Обычный'}</div>
+          <div class="task">${npc.profession ? npc.profession.name : 'Странник'} | ${npc.trait ? npc.trait.name : 'Обычный'} | ${npc.gender === 'female' ? '♀' : (npc.gender === 'male' ? '♂' : '')}${npc.isChild ? ' Ребёнок, ' + Math.floor(npc.age || 0) + ' лет' : (npc.age !== undefined ? ' ' + Math.floor(npc.age) + ' лет' : '')}</div>
           <div class="task" style="color:${isDead ? '#a83838' : '#c87b32'}; font-weight:bold; margin-top:2px;">Задача: ${taskText}</div>
 
           <div style="display:flex; align-items:center; gap:10px; margin-top:6px;">

@@ -65,10 +65,13 @@ setTimeout(() => {
     currentNpc = npc;
     try {
       let profName = (npc.profession && npc.profession.name) ? npc.profession.name : 'Странник';
+      let genderIcon = '';
+      if (npc.gender === 'female') genderIcon = ' ♀';
+      else if (npc.gender === 'male') genderIcon = ' ♂';
       if (npc.isChild) {
-          profName = 'Ребёнок, ' + Math.floor(npc.age || 0) + ' лет';
+          profName = 'Ребёнок' + genderIcon + ', ' + Math.floor(npc.age || 0) + ' лет';
       } else if (npc.age !== undefined) {
-          profName += ', ' + Math.floor(npc.age) + ' лет';
+          profName += genderIcon + ', ' + Math.floor(npc.age) + ' лет';
       }
       document.getElementById('df-modal-name').innerText = (npc.name || 'Безымянный') + ' (' + profName + ')';
     } catch(e) {

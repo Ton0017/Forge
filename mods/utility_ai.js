@@ -626,8 +626,12 @@ Reg.on("npc_tick", (npc, state) => {
   // ПИТЬЕ В ТАВЕРНЕ
   if (bestAction.type === 'drink_tavern') {
     if (adjBarrel) {
-      if (state.booze === undefined) state.booze = 20; // Инициализация
-      if (state.booze <= 0) {
+      // Ищем пиво в рюкзаке
+      const beerIdx = npc.inventory ? npc.inventory.findIndex(i => i.id === 'beer') : -1;
+      if (beerIdx !== -1) {
+          npc.inventory.splice(beerIdx, 1);
+      } else if (state.booze === undefined) state.booze = 20;
+      if (state.booze <= 0 && beerIdx === -1) {
         Reg.log(`${npc.name} хочет выпить, но бочка пуста!`, 'death');
         npc.emo.stress = Math.min(100, npc.emo.stress + 15);
         npc.task = { type: 'idle', path: [] };
@@ -1140,6 +1144,60 @@ Reg.on("npc_tick", (npc, state) => {
         const _fc = getCell(npc.x + _dx, npc.y + _dy);
         if (_fc && (_fc.type === 'forge' || _fc.type === 'anvil')) { _atForge = true; break; }
       }
+    }
+
+    // ПРОВЕРКА: Хватает ли ресурсов в рюкзаке для крафта?
+    let _hasResources = true;
+    for (let _res in _recipe.cost) {
+        const _need = _recipe.cost[_res];
+        const _have = npc.inventory.filter(i => (i.id === _res || (i.tags && i.tags.includes(_res)))).length;
+        if (_have < _need) { _hasResources = false; break; }
+    }
+
+    if (!_hasResources) {
+        // Если ресурсов нет — идём к складу
+        if (npc.task.type !== 'go_to_storage_for_craft') {
+            let _storage = null, _bestD = 999;
+            for (let _k in state.cells) {
+                const _c = state.cells[_k];
+                if (_c.type === 'storage') {
+                    const [_sx, _sy] = _k.split(',').map(Number);
+                    const _d = Math.abs(npc.x - _sx) + Math.abs(npc.y - _sy);
+                    if (_d < _bestD) { _storage = { x: _sx, y: _sy }; _bestD = _d; }
+                }
+            }
+            if (_storage) {
+                const _path = window.GameUtils.findPath(npc.x, npc.y, _storage.x, _storage.y, 'storage');
+                if (_path && _path.length > 0) {
+                    npc.task = { type: 'go_to_storage_for_craft', path: _path, target: _storage, job: _job };
+                    return true;
+                }
+            }
+        } else {
+            // Мы уже идём к складу. Дошли?
+            const _dist = Math.abs(npc.x - npc.task.target.x) + Math.abs(npc.y - npc.task.target.y);
+            if (_dist <= 1) {
+                // Забираем ресурсы со склада
+                const _sCell = getCell(npc.task.target.x, npc.task.target.y);
+                if (_sCell && _sCell.items) {
+                    for (let _res in _recipe.cost) {
+                        let _need = _recipe.cost[_res];
+                        _sCell.items = _sCell.items.filter(item => {
+                            if (_need > 0 && (item.id === _res || (item.tags && item.tags.includes(_res)))) {
+                                npc.inventory.push(item);
+                                _need--;
+                                return false;
+                            }
+                            return true;
+                        });
+                    }
+                    Reg.log(`${npc.name} взял ресурсы со склада для крафта.`, 'sys');
+                }
+                npc.task = { type: 'idle', path: [] }; // Сброс, чтобы на следующем тике он пошел к наковальне
+                return true;
+            }
+        }
+        return true; // Ждём, пока дойдет до склада
     }
 
     if (!_atForge) {

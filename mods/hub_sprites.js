@@ -33,63 +33,22 @@
     // 2. СТОЛ (Деревянный, с кружкой)
     Reg.tile('table', (ctx, sx, sy, seed) => {
       drawFloor(ctx, sx, sy, seed);
-      // Тень
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(sx + 6, sy + 26, 20, 3);
-      // Ножки
-      ctx.fillStyle = '#4a2a10';
-      ctx.fillRect(sx + 8, sy + 18, 3, 10);
-      ctx.fillRect(sx + 21, sy + 18, 3, 10);
-      // Столешница
-      ctx.fillStyle = '#6a4a2a';
-      ctx.fillRect(sx + 4, sy + 12, 24, 6);
-      ctx.fillStyle = '#8a6a4a';
-      ctx.fillRect(sx + 4, sy + 12, 24, 2);
-      // Кружка на столе
-      ctx.fillStyle = '#e8d0a0';
-      ctx.fillRect(sx + 14, sy + 7, 4, 5);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(sx + 14, sy + 6, 4, 1);
+      const img = getImg('assets/objects/table.png');
+      if (img && img.complete) ctx.drawImage(img, sx, sy, 32, 32);
     });
 
     // 3. АЛТАРЬ (Каменный, со свечами)
     Reg.tile('altar', (ctx, sx, sy, seed) => {
       drawFloor(ctx, sx, sy, seed);
-      // Основание
-      ctx.fillStyle = '#5a5a60';
-      ctx.fillRect(sx + 6, sy + 16, 20, 12);
-      ctx.fillStyle = '#7a7a80';
-      ctx.fillRect(sx + 5, sy + 12, 22, 6);
-      ctx.fillStyle = '#9a9aa0';
-      ctx.fillRect(sx + 5, sy + 12, 22, 2);
-      // Свечи
-      ctx.fillStyle = '#e8d8b0';
-      ctx.fillRect(sx + 8, sy + 6, 2, 6);
-      ctx.fillRect(sx + 22, sy + 6, 2, 6);
-      // Огонь свечей
-      ctx.fillStyle = '#f0c860';
-      ctx.fillRect(sx + 8, sy + 4, 2, 2);
-      ctx.fillRect(sx + 22, sy + 4, 2, 2);
+      const img = getImg('assets/objects/altar.png');
+      if (img && img.complete) ctx.drawImage(img, sx, sy, 32, 32);
     });
 
     // 4. СТОЛ ДЛЯ АЛХИМИИ (С колбами)
     Reg.tile('alchemy', (ctx, sx, sy, seed) => {
       drawFloor(ctx, sx, sy, seed);
-      // Стол
-      ctx.fillStyle = '#5a3a1a';
-      ctx.fillRect(sx + 4, sy + 16, 24, 8);
-      // Колбы
-      ctx.fillStyle = '#3a7a3a'; // Зеленая жидкость
-      ctx.fillRect(sx + 8, sy + 8, 4, 8);
-      ctx.fillStyle = '#7a3a7a'; // Фиолетовая
-      ctx.fillRect(sx + 14, sy + 6, 4, 10);
-      ctx.fillStyle = '#3a3a7a'; // Синяя
-      ctx.fillRect(sx + 20, sy + 10, 4, 6);
-      // Горлышки
-      ctx.fillStyle = '#a0a0a0';
-      ctx.fillRect(sx + 9, sy + 6, 2, 2);
-      ctx.fillRect(sx + 15, sy + 4, 2, 2);
-      ctx.fillRect(sx + 21, sy + 8, 2, 2);
+      const img = getImg('assets/objects/magic table.png');
+      if (img && img.complete) ctx.drawImage(img, sx, sy, 32, 32);
     });
 
     // 5. КОСТЕР (Бревна и огонь)

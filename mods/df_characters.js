@@ -24,18 +24,14 @@ Reg.df = {
     
     // ЖЕСТКИЙ БЕЛЫЙ СПИСОК (Только проверенные дварфы и люди)
     const allowedSkins = [
-      'dwarf1.png', 'dwarf2.png', 'dwarf3.png', 'dwarf4.png',
-      'dwarf5.png', 'dwarf6.png', 'dwarf7.png', 'dwarf8.png',
-      'dwarf miner.png', 'dwarf warrior.png', 'dwarf engineer.png',
-      'dwarf king.png', 'dwarf mage.png', 'dwarf ranger.png', 'dwarf scientist.png',
-      'common man.png', 'human1.png', 'human child.png', 'human girl.png'
+      'skeleton_0.png', 'goblin_0.png'
     ];
     
     // Оставляем только те, которые реально лежат в папке игры
-    const validSkins = allowedSkins.filter(skin => Reg.assets.skins.includes(skin));
+    const validSkins = allowedSkins;
     
     // Если вдруг ничего не нашли, берем базового дварфа (но НЕ монстра)
-    const sk = validSkins.length > 0 ? pick(validSkins) : 'dwarf1.png';
+    const sk = pick(validSkins);
 
     if (!window._traitIdx) window._traitIdx = Math.floor(Math.random() * 4);
     const selectedTrait = this.traits[window._traitIdx % this.traits.length];
@@ -45,12 +41,8 @@ Reg.df = {
     const _gender = Math.random() < 0.5 ? 'male' : 'female';
     const _age = 20 + Math.floor(Math.random() * 20); // 20-40 лет
 
-    // Скин по полу (женские спрайты из папки)
+    // Скин одинаков для всех полов (скелеты/гоблины/рыцари)
     let _finalSkin = sk;
-    if (_gender === 'female' && Reg.assets && Reg.assets.skins) {
-      if (Reg.assets.skins.includes('commoner man woman.png')) _finalSkin = 'commoner man woman.png';
-      else if (Reg.assets.skins.includes('man woman 1.png')) _finalSkin = 'man woman 1.png';
-    }
 
     return {
       name: pick(this.names) + ' ' + pick(this.surnames),

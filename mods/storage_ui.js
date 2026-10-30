@@ -2,7 +2,7 @@
   setTimeout(() => {
     // 1. Плавающая кнопка "СКЛАД" (справа, над бестиарием)
     const btn = document.createElement('div');
-    btn.innerHTML = '<img src="assets/icons/boiler.png" style="width:32px; height:32px; image-rendering:pixelated;" onerror="this.outerHTML=\'<span style=\\\'color:#c87b32; font-weight:bold; font-size:14px;\\\'>СКЛАД</span>\'">';
+    btn.innerHTML = '<img src="assets/icons/chest.png" style="width:32px; height:32px; image-rendering:pixelated;" onerror="this.outerHTML=\'<span style=\\\'color:#c87b32; font-weight:bold; font-size:14px;\\\'>СКЛАД</span>\'">';
     btn.style.cssText = 'position:fixed; bottom:180px; right:15px; width:48px; height:48px; background:#1e1a16; border:2px solid #c87b32; border-radius:4px; display:flex; justify-content:center; align-items:center; z-index:999999; cursor:pointer; box-shadow:0 4px 10px rgba(0,0,0,0.8); user-select:none;';
     document.body.appendChild(btn);
 

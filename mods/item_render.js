@@ -8,6 +8,27 @@
 
     if (!cell._rlog) { cell._rlog = true; if (window.Reg && Reg.log) Reg.log('[РЕНДЕР] ' + item.name + ' в клетке ' + wx + ',' + wy, 'sys'); }
 
+    if (item.isEmoji === false && item.file && item.file.includes('.png')) {
+      // РИСУЕМ КАРТИНКУ ИЗ assets/equipment
+      const img = getImg('assets/equipment/' + item.file);
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, sx + 4, sy + 4, 24, 24);
+        ctx.restore();
+      } else {
+        // Пока грузится — заглушка
+        ctx.fillStyle = '#888';
+        ctx.fillRect(sx + 8, sy + 8, 16, 16);
+      }
+      if (cell.items.length > 1) {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px monospace';
+        ctx.fillText('x' + cell.items.length, sx + 2, sy + 12);
+      }
+      return;
+    }
+
     if (item.isEmoji) {
       ctx.save();
       // Тень убрана

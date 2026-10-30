@@ -1,0 +1,112 @@
+(function(){
+  if (window.ITEM_DATA && window.createItem) return; // Проверяем, что есть и то, и другое
+
+  // === 1. БАЗА ПРЕДМЕТОВ (Шаблоны, без качества) ===
+  window.ITEM_DATA = {
+    stone:      { name: 'Камень',        emoji: '🪨', type: 'resource', tags: ['stone', 'heavy'], mass: 10, hardness: 6, sharpness: 0 },
+    iron_ore:   { name: 'Железная руда', emoji: '🧱', type: 'resource', tags: ['iron_ore', 'heavy'], mass: 5, hardness: 8, sharpness: 0 },
+    wood:       { name: 'Бревно',        emoji: '🪵', type: 'resource', tags: ['wood', 'fuel'], mass: 8, hardness: 3, sharpness: 0 },
+    coal:       { name: 'Уголь',         emoji: '⚫', type: 'resource', tags: ['coal', 'fuel'], mass: 3, hardness: 2, sharpness: 0 },
+
+    meat_raw:   { name: 'Сырое мясо',    emoji: '🥩', type: 'food', tags: ['meat', 'raw', 'edible'], mass: 2, calories: 30, poisonChance: 0.15 },
+    meat_cooked:{ name: 'Жареное мясо',  emoji: '🍖', type: 'food', tags: ['meat', 'cooked', 'edible'], mass: 2, calories: 60, poisonChance: 0 },
+    bread:      { name: 'Хлеб',          sprite: 'bread_icon.png', type: 'food', tags: ['edible', 'bread'], mass: 1, calories: 40, poisonChance: 0 },
+    mushroom:   { name: 'Гриб',          emoji: '🍄', type: 'food', tags: ['edible', 'mushroom'], mass: 1, calories: 15, poisonChance: 0.3 },
+    wheat:      { name: 'Пшеница',       emoji: '🌾', type: 'food', tags: ['edible', 'grain', 'wheat'], mass: 1, calories: 20, poisonChance: 0 },
+    seeds:      { name: 'Семена',        emoji: '🌱', type: 'resource', tags: ['seed', 'planting'], mass: 1 },
+    berry:      { name: 'Ягоды',        emoji: '🍒', type: 'food', tags: ['berry', 'raw', 'edible'], mass: 1, calories: 15, poisonChance: 0.05 },
+    fish:       { name: 'Рыба',          emoji: '🐟', type: 'food', tags: ['fish', 'raw', 'edible'], mass: 1, calories: 25, poisonChance: 0.05 },
+
+    pickaxe:    { name: 'Железная кирка',sprite: 'pickaxe_icon.png', type: 'tool', tags: ['tool', 'pickaxe', 'metal', 'weapon'], mass: 5, hardness: 8, sharpness: 3, durability: 100 },
+    axe:        { name: 'Железный топор',sprite: 'axe_icon.png', type: 'tool', tags: ['tool', 'axe', 'metal', 'weapon'], mass: 6, hardness: 8, sharpness: 6, durability: 100 },
+    fishing_rod:{ name: 'Удочка',        emoji: '🎣', type: 'tool', tags: ['tool', 'fishing'], mass: 2, hardness: 2, sharpness: 1, durability: 50 },
+    fishing_rod:{ name: 'Удочка',        emoji: '🎣', type: 'tool', tags: ['tool', 'fishing'], mass: 2, hardness: 2, sharpness: 1, durability: 50 },
+
+    sword:      { name: 'Железный меч',  sprite: 'sword_icon.png', type: 'weapon', tags: ['weapon', 'sword', 'metal', 'sharp'], mass: 4, hardness: 8, sharpness: 8, integrity: 100 },
+    club:       { name: 'Дубина',        emoji: '🏏', type: 'weapon', tags: ['weapon', 'wood', 'blunt'], mass: 6, hardness: 3, sharpness: 0, integrity: 50 },
+
+    leather_armor: { name: 'Кожаный доспех', sprite: 'leather_armor_icon.png', type: 'armor', tags: ['armor', 'leather', 'flexible'], mass: 3, hardness: 3, coverage: 0.7, flexibility: 0.9, integrity: 60 },
+    iron_armor:    { name: 'Железный нагрудник', sprite: 'iron_armor_icon.png', type: 'armor', tags: ['armor', 'metal', 'heavy', 'rigid'], mass: 10, hardness: 8, coverage: 0.9, flexibility: 0.2, integrity: 150 },
+
+    bandage:    { name: 'Бинт',          emoji: '🩹', type: 'misc', tags: ['cloth', 'medical', 'bandage'], material: 'cloth', mass: 1, stopBleedChance: 0.9 },
+    herb:       { name: 'Лечебная трава',emoji: '🌿', type: 'misc', tags: ['herb', 'medical'], mass: 1, healPerTick: 2, duration: 10 },
+
+    scrap:      { name: 'Металлолом',    emoji: '🔩', type: 'scrap', tags: ['scrap', 'metal'], mass: 2, hardness: 5, sharpness: 1 }
+  };
+
+  // === 2. МОДИФИКАТОРЫ КАЧЕСТВА (Шансы и проценты) ===
+  window.QUALITY_TIERS = {
+    masterwork:   { name: 'Шедевр',         critBonus: 0.30, sharpnessMult: 1.5,  integrityMult: 2.0, beauty: 100, priceMult: 3.0, color: '#ffcc00' },
+    exceptional:  { name: 'Исключительное', critBonus: 0.15, sharpnessMult: 1.3,  integrityMult: 1.5, beauty: 70,  priceMult: 2.0, color: '#c87b32' },
+    superior:     { name: 'Превосходное',   critBonus: 0.05, sharpnessMult: 1.15, integrityMult: 1.2, beauty: 50,  priceMult: 1.5, color: '#a09070' },
+    fine:         { name: 'Хорошее',        critBonus: 0.00, sharpnessMult: 1.0,  integrityMult: 1.0, beauty: 30,  priceMult: 1.0, color: '#e0d8c8' },
+    ordinary:     { name: 'Обычное',        critBonus: -0.05,sharpnessMult: 0.9,  integrityMult: 0.8, beauty: 10,  priceMult: 0.8, color: '#c8c8b8' },
+    shoddy:       { name: 'Плохое',         critBonus: -0.15,sharpnessMult: 0.7,  integrityMult: 0.6, beauty: 5,   priceMult: 0.5, color: '#a83838' },
+    broken:       { name: 'Бракованное',    critBonus: -0.30,sharpnessMult: 0.5,  integrityMult: 0.4, beauty: 0,   priceMult: 0.2, color: '#5a3a3a' }
+  };
+
+  // === 3. ФУНКЦИЯ СОЗДАНИЯ ПРЕДМЕТА (С качеством) ===
+  window.createItem = function(id, qualityTier) {
+      const template = window.ITEM_DATA[id];
+      if (!template) return null;
+      
+      // Если качество не задано — "Хорошее" (обычный предмет)
+      const q = window.QUALITY_TIERS[qualityTier || 'fine'];
+      
+      let item = {
+          id: id,
+          name: template.name,
+          type: template.type,
+          tags: [...template.tags],
+          file: template.sprite || template.emoji,
+          isEmoji: !template.sprite,
+          mass: template.mass,
+          hardness: template.hardness,
+          sharpness: template.sharpness,
+          coverage: template.coverage,
+          flexibility: template.flexibility,
+          integrity: template.integrity,
+          durability: template.durability,
+          calories: template.calories,
+          poisonChance: template.poisonChance,
+          stopBleedChance: template.stopBleedChance,
+          material: template.material,
+          quality: qualityTier || 'fine',
+          qualityName: q.name,
+          qualityColor: q.color,
+          critBonus: q.critBonus,
+          beauty: q.beauty,
+          priceMult: q.priceMult
+      };
+
+      // ПРИМЕНЯЕМ КАЧЕСТВО (только к оружию, броне, инструментам)
+      if (template.type === 'weapon' || template.type === 'tool') {
+          item.sharpness = Math.round((item.sharpness || 0) * q.sharpnessMult * 10) / 10;
+          item.integrity = Math.round((item.integrity || 100) * q.integrityMult);
+      }
+      if (template.type === 'armor') {
+          item.integrity = Math.round((item.integrity || 100) * q.integrityMult);
+          // Качество брони влияет на шанс блокировки
+          item.blockChance = (item.coverage || 0.5) * q.sharpnessMult;
+      }
+
+      return item;
+  };
+
+  // === 4. ГЕНЕРАТОР КАЧЕСТВА ПРИ КРАФТЕ (Зависит от навыка кузнеца) ===
+  window.rollQuality = function(craftingSkill) {
+      const skill = craftingSkill || 0;
+      const roll = Math.random() * 100;
+      
+      // Опытный кузнец (навык 10) чаще делает шедевры
+      if (roll < 1 + skill) return 'masterwork';
+      if (roll < 6 + skill * 2) return 'exceptional';
+      if (roll < 16 + skill * 3) return 'superior';
+      if (roll < 50 + skill * 2) return 'fine';
+      if (roll < 80) return 'ordinary';
+      if (roll < 95) return 'shoddy';
+      return 'broken';
+  };
+
+  console.log('[Data Items] База предметов с качеством загружена.');
+})();

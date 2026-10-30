@@ -24,6 +24,18 @@
       cost: { wood: 2, cloth: 1 },
       time: 20,
       signal: 'low_food'
+    },
+    cheap_ale: {
+      name: 'Дешевый эль',
+      cost: { wheat: 2 },
+      time: 10,
+      signal: 'thirst'
+    },
+    slop: {
+      name: 'Падаль',
+      cost: { edible: 2 }, // Любые 2 съедобных предмета
+      time: 5,
+      signal: 'hunger'
     }
   };
 
@@ -51,7 +63,18 @@
     if (!recipe || !npc.inventory) return false;
     for (let res in recipe.cost) {
       const need = recipe.cost[res];
-      const have = npc.inventory.filter(i => (i.id === res || (i.tags && i.tags.includes(res)))).length;
+      let have = npc.inventory.filter(i => (i.id === res || (i.tags && i.tags.includes(res)))).length;
+      
+      // Если не хватает в рюкзаке, ищем на складах
+      if (have < need && window.state && window.state.cells) {
+        for (let k in window.state.cells) {
+          const c = window.state.cells[k];
+          if (c && c.type === 'storage' && c.items) {
+            have += c.items.filter(i => (i.id === res || (i.tags && i.tags.includes(res)))).length;
+          }
+        }
+      }
+      
       if (have < need) return false;
     }
     return true;
@@ -63,6 +86,8 @@
     if (!recipe || !npc.inventory) return;
     for (let res in recipe.cost) {
       let need = recipe.cost[res];
+      
+      // Списываем из рюкзака
       npc.inventory = npc.inventory.filter(item => {
         if (need > 0 && (item.id === res || (item.tags && item.tags.includes(res)))) {
           need--;
@@ -70,6 +95,23 @@
         }
         return true;
       });
+      
+      // Если не хватило, списываем со склада
+      if (need > 0 && window.state && window.state.cells) {
+        for (let k in window.state.cells) {
+          if (need <= 0) break;
+          const c = window.state.cells[k];
+          if (c && c.type === 'storage' && c.items) {
+            c.items = c.items.filter(item => {
+              if (need > 0 && (item.id === res || (item.tags && item.tags.includes(res)))) {
+                need--;
+                return false;
+              }
+              return true;
+            });
+          }
+        }
+      }
     }
   };
 

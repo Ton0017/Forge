@@ -1,0 +1,1569 @@
+Reg.on('npc_hired', (npc) => {
+  npc.fatigue = 0; // Усталость (0-100)
+  npc.socialNeed = 0; // Потребность в общении
+  npc.stuckCount = 0;
+  npc.lastX = 0;
+  npc.lastY = 0;
+});
+
+Reg.on("npc_tick", (npc, state) => {
+    if (npc.isCaravanTrader) { npc.task = { type: "idle", path: [] }; return true; }
+  if (!npc.inv) npc.inv = { ore: 0 };
+  if (!npc.states) npc.states = {};
+  if (!npc.emo) npc.emo = { stress: 0, joy: 20, fear: 0, drunk: 0, anger: 0 };
+  if (!npc.task) npc.task = { type: 'idle', path: [] };
+  if (npc.fatigue === undefined) npc.fatigue = 0;
+  if (npc.socialNeed === undefined) npc.socialNeed = 0;
+  if (npc.faithNeed === undefined) npc.faithNeed = 0;
+  npc.faithNeed = Math.min(100, npc.faithNeed + 0.1); // Вера растет медленно
+
+  if (npc.states['insane']) {
+    // Безумный дварф бьется головой, но у него есть шанс выжить
+    if (Math.random() < 0.02) {
+      npc.hp -= 1;
+      Reg.log(`${npc.name} бьется головой о стену в приступе безумия.`, 'death');
+    }
+    
+    // Стресс постепенно падает, чтобы он мог прийти в себя
+    npc.emo.stress = Math.max(0, npc.emo.stress - 4);
+    
+    // Если стресс упал ниже 50, он выходит из безумия
+    if (npc.emo.stress < 50) {
+      delete npc.states['insane'];
+      Reg.log(`${npc.name} приходит в себя. Безумие отступает.`, 'sys');
+    }
+    
+    if (npc.hp <= 0) {
+      killNpc(npc, 'умер от безумия');
+    }
+    return true;
+  }
+
+  // ЛОГИКА СНА: Если он спит, он восстанавливает силы постепенно
+  const hasMonsterNearby = findAdjacentMonster(npc.x, npc.y);
+  if (npc.task.type === 'rest' && !hasMonsterNearby) {
+    npc.fatigue = Math.max(0, npc.fatigue - 1.5); 
+    npc.hp = Math.min(npc.maxHp, npc.hp + 0.5);   
+    if (npc.fatigue <= 0) {
+      npc.task = { type: 'idle', path: [] }; 
+      Reg.log(`${npc.name} просыпается.`, 'sys'); if (npc.memory) Reg.addThought(npc, 'woke_up');
+    }
+    return true; 
+  }
+ 
+
+  // АНТИ-ЗАВИСАНИЕ: Если дварф застрял на одном месте или в одной задаче > 50 тиков, сбрасываем
+  if (!npc._lastPos) npc._lastPos = {x: npc.x, y: npc.y, taskType: npc.task.type};
+  if (npc._lastPos.x === npc.x && npc._lastPos.y === npc.y && npc._lastPos.taskType === npc.task.type) {
+      npc._stuckTimer = (npc._stuckTimer || 0) + 1;
+      if (npc._stuckTimer > 50) {
+          npc.task = { type: 'idle', path: [] };
+          npc._stuckTimer = 0;
+          npc._lastPos = {x: npc.x, y: npc.y, taskType: 'idle'};
+      }
+  } else {
+      npc._lastPos = {x: npc.x, y: npc.y, taskType: npc.task.type};
+      npc._stuckTimer = 0;
+  }
+
+  // ТОРГОВЕЦ НЕ ДОЛЖЕН РАБОТАТЬ И ПИТЬ ЭЛЬ (только торговать)
+  if (npc.isCaravanTrader) {
+      if (npc.task && npc.task.type !== 'idle') npc.task = { type: 'idle', path: [] };
+      return true; // Блокируем весь остальной ИИ для торговца
+  }
+
+  // АНТИЗАСТРЕВАНИЕ: Если он не двигался 5 тиков и не копает, даем пинка
+  if (npc.x === npc.lastX && npc.y === npc.lastY && npc.task.type !== 'dig') {
+    npc.stuckCount = (npc.stuckCount || 0) + 1;
+    if (npc.stuckCount > 5) {
+      npc.task = { type: 'dig', path: [] }; // Принудительно идем копать
+      npc.stuckCount = 0;
+    }
+  } else {
+    npc.stuckCount = 0;
+  }
+  npc.lastX = npc.x;
+  npc.lastY = npc.y;
+
+  if (npc.task.type === 'idle' || npc.task.type === 'wander') {
+    npc.idleTime = (npc.idleTime || 0) + 1;
+    const _pc = (typeof getCell === 'function') ? getCell(npc.x, npc.y) : null;
+    const _hi = _pc && _pc.items && _pc.items.length > 0;
+    if (_hi) {
+      npc._pickupDelay = (npc._pickupDelay || 0) + 1;
+      if (npc._pickupDelay >= 30) { npc._pickupDelay = 0; npc.idleTime = 0; }
+    } else if (npc.idleTime > 10 && !npc.isChild) {
+      npc._pickupDelay = 0;
+      npc.task = { type: 'dig', path: [] };
+      npc.idleTime = 0;
+    } else if (npc.idleTime > 10 && npc.isChild) {
+      npc._pickupDelay = 0;
+      npc.idleTime = 0;
+    }
+  } else {
+    npc.idleTime = 0;
+    npc._pickupDelay = 0;
+  }
+
+  // Рост усталости и социальной потребности
+  npc.fatigue = Math.min(100, npc.fatigue + 0.5);
+  npc.socialNeed = Math.min(100, npc.socialNeed + 0.05);
+  npc.thirst = Math.min(100, (npc.thirst || 0) + 0.2);
+  if (npc.thirst >= 100) { npc.hp -= 2; if (npc.hp <= 0) { killNpc(npc, "умер от жажды"); return true; } }
+  
+  // РОСТ ГОЛОДА (чтобы не перебивался core.js)
+  npc.hunger = Math.min(100, (npc.hunger || 0) + 0.15);
+  if (npc.hunger >= 100) { npc.hp -= 5; if (npc.hp <= 0) { killNpc(npc, "умер от голода"); return true; } }
+  // Голод тикает в core.js, здесь мы его не трогаем, чтобы не было двойного роста (NaN)
+
+  const hasMonster = findAdjacentMonster(npc.x, npc.y);
+
+  if (npc.task.type === 'fight' && !hasMonster) {
+    npc.task = { type: 'idle', path: [] };
+  }
+
+  if (npc.task.type.startsWith('go_to_') && npc.task.path && npc.task.path.length > 0) {
+    // Скорость = базовая (от брони) × штраф от травм (body_system + system_injuries)
+    const _effSpeed = (npc.speed !== undefined ? npc.speed : 1.0) * (npc.bodySpeedPenalty || 1.0);
+    if (Math.random() > _effSpeed) return true;
+
+    const nextStep = npc.task.path.shift();
+    // ПРОХОДИМ СКВОЗЬ ДРУГИХ
+    npc.x = nextStep.x; 
+    npc.y = nextStep.y;
+    return true; 
+  }
+
+  let adjBarrel = null;
+  for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+    const c = getCell(npc.x + dx, npc.y + dy);
+    if (c && c.type === 'beer_tap') adjBarrel = { x: npc.x + dx, y: npc.y + dy };
+  }
+
+  let actions = [];
+  if (hasMonster && !npc.isChild) actions.push({ type: 'fight', weight: 1000 });
+  // Считаем реальную руду в рюкзаке
+  let realOreCount = 0;
+  if (npc.inventory) {
+      realOreCount = npc.inventory.filter(i => i.tags && i.tags.includes('iron_ore')).length;
+  }
+  if (realOreCount >= 10) actions.push({ type: 'deposit', weight: 500 });
+  
+  // МОЛИТВА: Если вера высокая, дварф хочет помолиться
+  if (npc.faithNeed > 50) {
+      actions.push({ type: 'pray', weight: npc.faithNeed * 2 });
+  }
+  
+  // КРАФТ: Если у дварфа есть руда (но меньше 10, чтобы не нести на склад), и он у наковальни
+  let nearAnvil = false;
+  for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -2; dy <= 2; dy++) {
+          const c = getCell(npc.x + dx, npc.y + dy);
+          if (c && (c.type === 'forge' || c.type === 'anvil')) { nearAnvil = true; break; }
+      }
+  }
+  // Считаем реальную руду в рюкзаке (предметы с тегом iron_ore)
+  let oreCount = 0;
+  if (npc.inventory) {
+      oreCount = npc.inventory.filter(i => i.tags && i.tags.includes('iron_ore')).length;
+  }
+  
+  // Проверяем прочность кирки (если ее нет или она сломана)
+  let hasPickaxe = npc.inventory && npc.inventory.find(i => i.tags && i.tags.includes('pickaxe'));
+  let needsPickaxe = !hasPickaxe || (hasPickaxe.durability !== undefined && hasPickaxe.durability <= 0);
+
+  // Куем только если есть 3 руды И нужна кирка
+  if (nearAnvil && oreCount >= 3 && needsPickaxe) {
+      actions.push({ type: 'craft_pickaxe', weight: 100 });
+  }
+
+  // РЫБАЛКА: Крафт удочки (зависит от дефицита еды, а не от личного голода)
+  let hasFishingRod = npc.inventory && npc.inventory.find(i => i.tags && i.tags.includes('fishing'));
+  let hasWoodForRod = npc.inventory && npc.inventory.filter(i => i.tags && i.tags.includes('wood')).length >= 2;
+  let hasClothForRod = npc.inventory && npc.inventory.find(i => i.tags && (i.tags.includes('cloth') || i.tags.includes('bandage')));
+  let aliveDwarves = state.npcs.filter(n => n.alive && !n.isCaravanTrader).length;
+  let foodDeficit = Math.max(0, 1 - ((state.food || 0) / (aliveDwarves * 5 || 1)));
+
+  if (!hasFishingRod && hasWoodForRod && hasClothForRod && foodDeficit > 0) {
+      actions.push({ type: 'craft_fishing_rod', weight: 40 * (1 + foodDeficit) });
+  }
+
+  // КРАФТ ИЗ ОЧЕРЕДИ (приказы игрока)
+  if (state.craftQueue && state.craftQueue.length > 0 && window.CRAFTABLES && !npc.isChild) {
+    for (let _ci = 0; _ci < state.craftQueue.length; _ci++) {
+      const _job = state.craftQueue[_ci];
+      if (_job.count <= 0) continue;
+
+      // БРОНИРОВАНИЕ: если все места заняты и это не наш claim — пропускаем
+      if (!_job.claimedBy) _job.claimedBy = [];
+      const _myClaim = _job.claimedBy.find(e => e.id === npc.id);
+      if (!_myClaim && _job.claimedBy.length >= _job.count) continue;
+
+      if (!window.canCraft || !window.canCraft(npc, _job.id)) continue;
+
+      let _w = 100;
+      if (npc.hunger > 70) _w -= (npc.hunger - 70) * 2;
+      if (npc.thirst > 70) _w -= (npc.thirst - 70) * 2;
+      if (npc.fatigue > 80) _w -= 40;
+      if (npc.trait && npc.trait.id === 'lazy') _w -= 20;
+      if (npc.trait && npc.trait.id === 'hardworking') _w += 30;
+
+      if (_w > 0) {
+        // Захватываем или обновляем claim
+        if (_myClaim) { _myClaim.tick = state.tick; }
+        else { _job.claimedBy.push({ id: npc.id, tick: state.tick }); }
+        actions.push({ type: 'craft_job', weight: _w, job: _job });
+      }
+    }
+  }
+
+  // РЫБАЛКА: Вес действия (от дефицита еды в крепости, а не от личного голода)
+  {
+    const _fishRod = npc.inventory && npc.inventory.find(i => i.tags && i.tags.includes('fishing'));
+    if (_fishRod) {
+      const _aliveCrew = state.npcs.filter(n => n.alive && !n.isCaravanTrader).length;
+      const _foodDeficit = Math.max(0, 1 - ((state.food || 0) / (_aliveCrew * 5 || 1)));
+      const _desireFood = Math.pow(_foodDeficit, 1.5);
+
+      // Ищем ближайшую воду с рыбой (радиус 15)
+      let _waterTgt = null, _waterDist = 999;
+      for (let _fx = -15; _fx <= 15; _fx++) {
+        for (let _fy = -15; _fy <= 15; _fy++) {
+          const _fd = Math.abs(_fx) + Math.abs(_fy);
+          if (_fd === 0 || _fd >= _waterDist) continue;
+          const _fc = getCell(npc.x + _fx, npc.y + _fy);
+          if (_fc && _fc.type === 'water' && _fc.water && _fc.water.fishPopulation > 0) {
+            _waterTgt = { x: npc.x + _fx, y: npc.y + _fy };
+            _waterDist = _fd;
+          }
+        }
+      }
+
+      if (_waterTgt) {
+        // Опасность: монстр в радиусе 3 — вес 0 (не пойдёт)
+        let _danger = false;
+        for (let _fx = -3; _fx <= 3 && !_danger; _fx++) {
+          for (let _fy = -3; _fy <= 3; _fy++) {
+            const _fc = getCell(npc.x + _fx, npc.y + _fy);
+            if (_fc && _fc.monster) { _danger = true; break; }
+          }
+        }
+
+        if (!_danger) {
+          const _skill = (npc.skills && npc.skills.fishing) || 0;
+          const _prox = 1 / (1 + _waterDist / 15);
+          let _traitMod = 1.0;
+          if (npc.trait && npc.trait.id === 'hardworking') _traitMod = 1.1;
+          if (npc.trait && npc.trait.id === 'lazy') _traitMod = 0.8;
+          const _weight = 30 * (_desireFood + _skill / 10) * _prox * _traitMod;
+          if (_weight > 5) {
+            actions.push({ type: 'fishing', weight: _weight, target: _waterTgt });
+          }
+        }
+      }
+    }
+  }
+  
+  // Голод: приоритет еде из рюкзака, потом котел, потом поиск
+  if (npc.hunger > 60) {
+    const edibleInInv = npc.inventory && npc.inventory.some(i => i.tags && i.tags.includes('edible'));
+    if (edibleInInv) {
+      actions.push({ type: 'eat_item', weight: Math.pow(npc.hunger, 1.5) * 2 + 20 });
+    } else if (state.food > 0) {
+      actions.push({ type: 'eat', weight: Math.pow(npc.hunger, 1.5) * 2 });
+    } else {
+      actions.push({ type: 'forage', weight: Math.pow(npc.hunger, 1.5) * 2 });
+      if (npc.hunger > 85) actions.push({ type: 'eat_corpse', weight: 150 });
+      // КАННИБАЛИЗМ: только при диком голоде (>90)
+      if (npc.hunger > 90) {
+        let bodyNearby = false;
+        for (let dx = -12; dx <= 12 && !bodyNearby; dx++) {
+          for (let dy = -12; dy <= 12; dy++) {
+            const c = getCell(npc.x + dx, npc.y + dy);
+            if (c && c.dead_bodies && c.dead_bodies.length > 0) { bodyNearby = true; break; }
+          }
+        }
+        if (bodyNearby) actions.push({ type: 'eat_dwarf_corpse', weight: 180 });
+      }
+    }
+    // ГОЛОДНОЕ БЕЗУМИЕ
+    if (npc.hunger > 90 && npc.emo && npc.emo.stress > 60 && Reg.madness) {
+      actions.push({ type: 'madness', weight: 250 });
+    }
+  }
+
+  // Новое: Драка за руду (если Жадность > 70 и кто-то рядом копает)
+  if (npc.facets && npc.facets.greed > 70) {
+    actions.push({ type: 'steal_ore', weight: 60 });
+  }
+
+  // Эмерджентное безумие
+  if (npc.emo.stress > 80 && Reg.madness) {
+    actions.push({ type: 'madness', weight: 200 });
+  }
+  
+  // Сон: если устал или ранен
+  let restWeight = (npc.fatigue * 2) + (npc.hp < 50 ? (100 - npc.hp) * 1.5 : 0);
+  actions.push({ type: 'rest', weight: restWeight });
+
+  // Общение: если социальная потребность высокая, идет к столу
+  if (npc.socialNeed > 80) actions.push({ type: 'socialize', weight: npc.socialNeed * 2 });
+
+  if (adjBarrel && npc.thirst > 40) {
+      actions.push({ type: 'drink', weight: Math.pow(npc.thirst, 1.2) }); // Зависит только от жажды
+  }
+  // Пьем в таверне ТОЛЬКО если есть деньги. Иначе water_life.js заставит его идти к воде.
+  if (npc.thirst > 50 && (npc.wallet || 0) >= 5) {
+      actions.push({ type: 'drink_tavern', weight: Math.pow(npc.thirst, 1.5) * 2 });
+  }
+  // ГИГИЕНА: Если дварф грязный, он хочет помыться (чтобы раны не заразились)
+  if (npc.dirt && npc.dirt > 40) {
+      actions.push({ type: 'wash', weight: npc.dirt * 1.5 });
+  }
+  // ПРИКАЗЫ ИГРОКА (Эмерджентная логика)
+  if (state.playerOrders && state.playerOrders.length > 0) {
+    for (let i = 0; i < state.playerOrders.length; i++) {
+      const ord = state.playerOrders[i];
+      const dist = Math.abs(npc.x - ord.x) + Math.abs(npc.y - ord.y);
+      
+      // Приказ виден, если он в радиусе 20 клеток
+      if (dist <= 20) {
+        let baseWeight = 120; 
+        
+        // 1. ГОЛОД И ЖАЖДА (Если сильно голоден, приказ почти игнорируется)
+        if (npc.hunger > 70) baseWeight -= (npc.hunger - 70) * 2;
+        if (npc.thirst > 70) baseWeight -= (npc.thirst - 70) * 2;
+        
+        // 2. СТРЕСС И УСТАЛОСТЬ
+        if (npc.emo && npc.emo.stress > 60) baseWeight -= 30;
+        if (npc.fatigue > 80) baseWeight -= 40;
+        
+        // 3. ХАРАКТЕР
+        if (npc.trait && npc.trait.id === 'lazy') baseWeight -= 20;
+        if (npc.trait && npc.trait.id === 'hardworking') baseWeight += 30;
+        
+        // 4. НАВЫК (Опытный копатель быстрее согласится)
+        if (ord.type === 'dig' && npc.skills && npc.skills.mining) baseWeight += npc.skills.mining * 2;
+
+        // 5. БЕЗОПАСНОСТЬ (Если рядом монстр, игнорируем приказы, кроме атаки)
+        let hasMonsterNearby = false;
+        for(let dx=-2; dx<=2; dx++) for(let dy=-2; dy<=2; dy++) {
+            const c = getCell(npc.x+dx, npc.y+dy);
+            if(c && c.monster) hasMonsterNearby = true;
+        }
+        if (hasMonsterNearby && ord.type !== 'attack') baseWeight = 0;
+
+        // Если итоговый вес положительный, добавляем действие
+        if (baseWeight > 0) {
+            if (ord.type === 'build') {
+                const bData = window.BUILDINGS ? window.BUILDINGS[ord.buildType] : null;
+                if (bData) {
+                    let hasRes = true;
+                    for (let res in bData.cost) {
+                        const count = npc.inventory ? npc.inventory.filter(i => (i.id === res || (i.tags && i.tags.includes(res)))).length : 0;
+                        if (count < bData.cost[res]) hasRes = false;
+                    }
+                    if (hasRes) {
+                        if (npc.hunger > 70 || npc.thirst > 70) baseWeight = 50;
+                        actions.push({ type: 'build', weight: baseWeight, order: ord });
+                    }
+                }
+            } else {
+                actions.push({ type: ord.type, weight: baseWeight, order: ord });
+            }
+        }
+      }
+    }
+  }
+
+  // Жрец не копает (но может делать всё остальное)
+  if (!npc.isTempPriest) {
+      // Проверяем, есть ли дерево рядом
+      let nearbyTree = false;
+      for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+          const c = getCell(npc.x + dx, npc.y + dy);
+          if (c && (c.type === 'tree' || c.type === 'tree_pine')) { nearbyTree = true; break; }
+      }
+
+      if (nearbyTree && !npc.isChild) {
+          actions.push({ type: 'chop', weight: 80 }); // Высокий приоритет
+      } else if (nearbyTree && npc.isChild) {
+          // Ребёнок видит дерево, но не рубит
+      } else {
+          // ФИЗИКА: С протезом-оружием копать невозможно
+          let hasWeaponProsthetic = false;
+          if (npc.body) {
+              for (let part in npc.body) {
+                  if (npc.body[part].status === 'prosthetic' && npc.body[part].prostheticType === 'weapon') {
+                      hasWeaponProsthetic = true; break;
+                  }
+              }
+          }
+          if (!hasWeaponProsthetic && !npc.isChild) {
+              actions.push({ type: 'dig', weight: 30 });
+          }
+      }
+  }
+
+  // ПОДБОР: если рядом лежат предметы — идём их брать
+  let _nearItems = null;
+  for (let _ddx = -5; _ddx <= 5 && !_nearItems; _ddx++) {
+    for (let _ddy = -5; _ddy <= 5; _ddy++) {
+      if (_ddx === 0 && _ddy === 0) continue;
+      const _sc = getCell(npc.x + _ddx, npc.y + _ddy);
+      if (_sc && _sc.items && _sc.items.length > 0) { _nearItems = { x: npc.x + _ddx, y: npc.y + _ddy }; break; }
+    }
+  }
+  const _selfCell = getCell(npc.x, npc.y);
+  if (_nearItems || (_selfCell && _selfCell.items && _selfCell.items.length > 0)) {
+    actions.push({ type: 'haul', weight: 45 + (100 - (npc.fatigue || 0)) / 2 });
+  }
+
+  // КОСТЁР: дварф решает, пережечь ли бревно в уголь или сделать бинт
+  let _nearFire = false;
+  for (let _cdx = -2; _cdx <= 2 && !_nearFire; _cdx++) {
+    for (let _cdy = -2; _cdy <= 2; _cdy++) {
+      const _cc = getCell(npc.x + _cdx, npc.y + _cdy);
+      if (_cc && _cc.type === 'campfire') { _nearFire = true; break; }
+    }
+  }
+  if (_nearFire && npc.inventory) {
+    const _hasWood = npc.inventory.some(i => i.tags && i.tags.includes('wood'));
+    const _hasHerb = npc.inventory.some(i => i.tags && i.tags.includes('herb'));
+    const _coalCount = npc.inventory.filter(i => i.tags && i.tags.includes('coal')).length;
+
+    // Уголь нужен для кузни, но не в промышленных количествах
+    if (_hasWood && _coalCount < 3) {
+      const _hasOre = npc.inventory.some(i => i.tags && i.tags.includes('iron_ore'));
+      const _needsFuel = _hasOre || (npc.inventory.some(i => i.tags && i.tags.includes('pickaxe')) === false);
+      actions.push({ type: 'make_charcoal', weight: _needsFuel ? 70 : 25 });
+    }
+
+    // Бинт нужен, только если дварф ранен
+    if (_hasHerb && npc.hp < npc.maxHp * 0.85) {
+      const _hurt = npc.hp < npc.maxHp * 0.5;
+      actions.push({ type: 'make_bandage', weight: _hurt ? 90 : 40 });
+    }
+  }
+
+  for(let a of actions) {
+    if (a.type === 'dig' && (npc.trait && (npc.trait && npc.trait.id)) === 'hardworking' && npc.inv.ore < 10) a.weight += 100;
+    if (a.type === 'dig' && (npc.trait && (npc.trait && npc.trait.id)) === 'lazy') a.weight -= 20;
+    if (a.type === 'rest' && (npc.trait && (npc.trait && npc.trait.id)) === 'lazy' && npc.fatigue > 20) a.weight += 50;
+  }
+
+  for (let stateId in npc.states) {
+    const def = Reg.states[stateId];
+    if (def && def.modifyWeight) {
+      for (let a of actions) a.weight += def.modifyWeight(npc, a.type);
+    }
+  }
+
+  actions.sort((a, b) => b.weight - a.weight);
+  const bestAction = actions[0];
+
+  if (bestAction.type === 'fight') {
+    // Определяем цель: либо монстра рядом, либо по приказу
+    let targetMob = hasMonster;
+    if (!targetMob && bestAction.order) {
+        const oc = getCell(bestAction.order.x, bestAction.order.y);
+        if (oc && oc.monster) targetMob = oc.monster;
+    }
+    
+    if (!targetMob) {
+        // Монстр уже мертв или убежал
+        if (bestAction.order) state.playerOrders = state.playerOrders.filter(o => o !== bestAction.order);
+        npc.task = { type: 'idle', path: [] };
+        return true;
+    }
+
+    const distToMob = Math.abs(npc.x - targetMob.x) + Math.abs(npc.y - targetMob.y);
+    
+    if (distToMob <= 1) {
+        npc.task = { type: 'fight' };
+        if (Reg.doCombat) {
+          Reg.doCombat(npc, targetMob, state);
+        } else {
+          targetMob.hp -= 10;
+          if (targetMob.hp <= 0) getCell(targetMob.x, targetMob.y).monster = null;
+        }
+    } else {
+        // Идем к монстру (приказ)
+        if (!npc.task.path || npc.task.path.length === 0) {
+            const path = window.GameUtils.findPath(npc.x, npc.y, targetMob.x, targetMob.y, 'floor');
+            if (path && path.length > 0) {
+                npc.task = { type: 'move_to_wall', path: path }; // используем универсальный движок
+            } else {
+                npc.task = { type: 'idle', path: [] };
+                if (bestAction.order) state.playerOrders = state.playerOrders.filter(o => o !== bestAction.order);
+            }
+        } else {
+            const nextStep = npc.task.path.shift();
+            if (nextStep) { npc.x = nextStep.x; npc.y = nextStep.y; }
+        }
+    }
+    return true;
+  }
+  
+  // Обработка эмерджентного безумия
+  // ГОТОВКА НА КОСТРЕ
+  if (bestAction.type === 'cook_meat') {
+    // 1. ПРОВЕРКА: Есть ли у дварфа сырое мясо?
+    let rawMeatIdx = -1;
+    if (npc.inventory) {
+        rawMeatIdx = npc.inventory.findIndex(i => i.tags && i.tags.includes('meat') && i.tags.includes('raw'));
+    }
+    if (rawMeatIdx === -1) { return false; }
+
+    // 2. ИЩЕМ БЛИЖАЙШИЙ КОСТЕР (а не жестко зашитый -3,0)
+    let adjFire = null;
+    let targetFire = null;
+    
+    // Сначала проверяем, может он уже стоит рядом с костром
+    for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+      const c = getCell(npc.x + dx, npc.y + dy);
+      if (c && c.type === 'campfire') { 
+          adjFire = { x: npc.x + dx, y: npc.y + dy }; 
+          break; 
+      }
+    }
+
+    if (adjFire) {
+      // Он рядом — готовим
+      npc.inventory.splice(rawMeatIdx, 1); // Удаляем сырое мясо из рюкзака
+      state.food += 2; // 1 мясо = 2 еды на общий склад // Сбалансировано: 1 мясо = 1 еда 
+      Reg.log(`${npc.name} жарит мясо на костре. Запах разносится по шахте.`, 'sys');
+      Reg.addMemory(npc, `Он приготовил мясо на костре.`, { type: 'joy', power: 15, category: 'cooking' });
+      npc.emo.joy = Math.min(100, npc.emo.joy + 5);
+      npc.task = { type: 'idle', path: [] };
+      return true;
+    } else {
+      // Ищем любой костер на карте (в радиусе 20 клеток)
+      let closestDist = 999;
+      for (let k in state.cells) {
+          if (state.cells[k].type === 'campfire') {
+              const [cx, cy] = k.split(',').map(Number);
+              const dist = Math.abs(npc.x - cx) + Math.abs(npc.y - cy);
+              if (dist < closestDist && dist < 20) {
+                  closestDist = dist;
+                  targetFire = { x: cx, y: cy };
+              }
+          }
+      }
+
+      if (targetFire) {
+          const path = window.GameUtils.findPath(npc.x, npc.y, targetFire.x, targetFire.y, 'campfire');
+          if (path && path.length > 0) {
+              npc.task = { type: 'go_to_cook', path };
+          } else {
+              npc.task = { type: 'wander', path: [] }; // Не смог найти путь
+          }
+          return true;
+      } else {
+          // Костра нет нигде рядом
+          npc.task = { type: 'wander', path: [] };
+          return true;
+      }
+    }
+  }
+
+  // МОЛИТВА (обработка)
+  if (bestAction.type === 'pray') {
+    let adjAltar = null;
+    for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+      const c = getCell(npc.x + dx, npc.y + dy);
+      if (c && c.type === 'altar') { adjAltar = { x: npc.x + dx, y: npc.y + dy }; break; }
+    }
+    if (adjAltar) {
+      npc.faithNeed = Math.max(0, npc.faithNeed - 40);
+      npc.emo.stress = Math.max(0, npc.emo.stress - 30);
+      npc.emo.joy = Math.min(100, npc.emo.joy + 10);
+      Reg.log(`${npc.name} стоит на коленях перед алтарем. Он шепчет молитву.`, 'sys');
+      Reg.addMemory(npc, `Он помолился у алтаря. На душе стало легче.`, { type: 'joy', power: 15, category: 'religion' });
+      npc.task = { type: 'idle', path: [] };
+      return true;
+    } else {
+      // Ищем ЛЮБОЙ алтарь на карте
+      let targetAltar = null;
+      let closestDist = 999;
+      
+      for (let k in state.cells) {
+        if (state.cells[k].type === 'altar') {
+          const [ax, ay] = k.split(',').map(Number);
+          const dist = Math.abs(npc.x - ax) + Math.abs(npc.y - ay);
+          if (dist < closestDist) {
+            closestDist = dist;
+            targetAltar = { x: ax, y: ay };
+          }
+        }
+      }
+
+      if (targetAltar) {
+          // Ищем свободную клетку РЯДОМ с найденным алтарем
+          let target = null;
+          const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+          for (let [dx, dy] of dirs) {
+            const c = getCell(targetAltar.x + dx, targetAltar.y + dy);
+            if (c && c.type === 'floor' && !state.npcs.find(n => n.alive && n.x === targetAltar.x + dx && n.y === targetAltar.y + dy)) {
+              target = { x: targetAltar.x + dx, y: targetAltar.y + dy }; break;
+            }
+          }
+          
+          if (target) {
+              const path = window.GameUtils.findPath(npc.x, npc.y, target.x, target.y, 'floor');
+              if (path && path.length > 0) npc.task = { type: 'go_to_pray', path };
+              else npc.task = { type: 'wander', path: [] };
+          } else {
+              npc.task = { type: 'wander', path: [] };
+          }
+      } else {
+          npc.task = { type: 'wander', path: [] };
+      }
+      return true;
+    }
+  }
+
+  // ПИТЬЕ В ТАВЕРНЕ
+  if (bestAction.type === 'drink_tavern') {
+    if (adjBarrel) {
+      if (state.booze === undefined) state.booze = 20; // Инициализация
+      if (state.booze <= 0) {
+        Reg.log(`${npc.name} хочет выпить, но бочка пуста!`, 'death');
+        npc.emo.stress = Math.min(100, npc.emo.stress + 15);
+        npc.task = { type: 'idle', path: [] };
+        return true;
+      }
+
+      if ((npc.wallet || 0) >= 5) {
+        npc.wallet -= 5;
+        // ФИЗИЧЕСКИ УДАЛЯЕМ БОЧКУ С КАРТЫ
+        let barrelFound = false;
+        for (let dx = -1; dx <= 1 && !barrelFound; dx++) {
+            for (let dy = -1; dy <= 1 && !barrelFound; dy++) {
+                const adj = getCell(npc.x + dx, npc.y + dy);
+                if (adj && adj.type === 'beer_tap') {
+                    adj.type = 'floor'; // Бочка выпита
+                    barrelFound = true;
+                }
+            }
+        }
+      } else {
+        Reg.log(`${npc.name} хочет выпить, но у него нет денег!`, 'sys');
+        npc.task = { type: 'idle', path: [] };
+        return true;
+      }
+      npc.emo.drunk = Math.min(100, (npc.emo.drunk || 0) + 30);
+      npc.emo.stress = Math.max(0, npc.emo.stress - 40);
+      // ФИЗИКА ВОДЫ
+      const waterCell = getCell(npc.x, npc.y);
+      if (waterCell && waterCell.water) {
+          const w = waterCell.water;
+          // 1. ТЕМПЕРАТУРА (горячая/ледяная вода обжигает)
+          if (w.temperature > 40) { npc.hp -= 5; npc.emo.stress = Math.min(100, npc.emo.stress + 15); Reg.log(`${npc.name} обжигается о горячую воду!`, 'death'); }
+          if (w.temperature < 5) { npc.hp -= 3; npc.emo.stress = Math.min(100, npc.emo.stress + 10); Reg.log(`${npc.name} пьет ледяную воду. Зубы ломит.`, 'sys'); }
+
+          // 2. СОЛЕНОСТЬ (не утоляет жажду)
+          if (w.salinity === 'salt') {
+              npc.thirst = Math.max(0, npc.thirst - 20); // Плохо утоляет
+              Reg.log(`${npc.name} пьет соленую воду. Жажда не проходит.`, 'sys');
+          } else {
+              npc.thirst = 0; // Утолил
+          }
+
+          // 3. ЧИСТОТА (инфекция)
+          if (w.purity === 'infected' || w.purity === 'stagnant') {
+              if (Math.random() < 0.4) {
+                  npc.infections = npc.infections || [];
+                  if (!npc.infections.includes('stomach')) npc.infections.push('stomach');
+                  Reg.log(`${npc.name} пьет грязную воду. Внутри все горит.`, 'death');
+              }
+          }
+
+          // 4. ГЛУБИНА (утопление, если глубоко)
+          if (w.depth >= 3 && !npc.swims) {
+              npc.hp -= 2;
+              Reg.log(`${npc.name} барахтается в глубокой воде.`, 'combat');
+              if (npc.hp <= 0) { if (window.killNpc) window.killNpc(npc, 'утонул'); return true; }
+          }
+      } else {
+          npc.thirst = 0; // Если свойств нет (старая вода) — утоляет как раньше
+      }
+      Reg.log(`${npc.name} платит 5 золота и выпивает кружку эля.`, 'sys');
+      // Дварф выпил, теперь генерируем мысль через композер
+      const drinkThought = Reg.composer.generate(npc, 'beer_tap', 'drink');
+      if (drinkThought) {
+        Reg.addMemory(npc, drinkThought.text, drinkThought.emo);
+      } else {
+        Reg.addMemory(npc, "Он выпил эля.", { type: 'joy', power: 10, category: 'tavern' });
+      }
+      npc.task = { type: 'idle', path: [] };
+      return true;
+    } else {
+      let target = { x: 3, y: 0 };
+      const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+      for (let [dx, dy] of dirs) {
+        const c = getCell(3+dx, 0+dy);
+        if (c && c.type === 'floor' && !state.npcs.find(n => n.alive && n.x === 3+dx && n.y === 0+dy)) {
+          target = { x: 3+dx, y: 0+dy }; break;
+        }
+      }
+      const path = window.GameUtils.findPath(npc.x, npc.y, target.x, target.y, 'floor');
+      if (path && path.length > 0) {
+          npc.task = { type: 'go_to_drink', path };
+      } else {
+          // Если путь не найден, не тупим, а идем копать
+          npc.task = { type: 'dig', path: [] }; 
+          npc.thirst = Math.max(0, npc.thirst - 10); // Чуть-чуть снижаем жажду, чтобы он не застрял навсегда
+      }
+      return true;
+    }
+  }
+
+  // ЗАКУСКА
+  if (bestAction.type === 'eat_snack') {
+    if (adjSnack) {
+      state.gold -= 2;
+      npc.hunger = 0;
+      npc.hp = Math.min(npc.maxHp, npc.hp + 10);
+      Reg.log(`${npc.name} платит 2 золота за закуску.`, 'sys');
+      npc.task = { type: 'idle', path: [] };
+      return true;
+    } else {
+      let target = { x: 3, y: -1 };
+      const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+      for (let [dx, dy] of dirs) {
+        const c = getCell(3+dx, -1+dy);
+        if (c && c.type === 'floor' && !state.npcs.find(n => n.alive && n.x === 3+dx && n.y === -1+dy)) {
+          target = { x: 3+dx, y: -1+dy }; break;
+        }
+      }
+      const path = window.GameUtils.findPath(npc.x, npc.y, target.x, target.y, 'floor');
+      if (path && path.length > 0) npc.task = { type: 'go_to_snack', path };
+      else npc.task = { type: 'wander', path: [] };
+      return true;
+    }
+  }
+
+  if (bestAction.type === 'madness' && Reg.madness) {
+    const madness = Reg.madness.getAction(npc, state);
+    Reg.log(madness.text, 'death');
+    Reg.addMemory(npc, madness.text, madness.emo);
+    
+    // КУЛДАУН: чтобы не сходил с ума каждую секунду
+    npc.madnessCooldown = 200; 
+    npc.emo.stress -= 20; // Немного успокаивается после приступа
+    npc.task = { type: 'idle', path: [] };
+
+    // Вместо мгновенной смерти, снимаем только 1 HP
+    npc.hp -= 1; 
+    if (npc.hp <= 0) killNpc(npc, 'умер от безумия'); 
+    
+    // Вызываем мысль о безумии только ОДИН раз
+    if (!npc.hasGoneInsane) {
+        npc.hasGoneInsane = true;
+        Reg.addThought(npc, 'went_insane');
+    }
+    return true;
+}
+
+  if (bestAction.type === 'drink' && adjBarrel) {
+    // 1. ПРОВЕРКА: есть ли эль?
+    if (state.booze === undefined) state.booze = 20;
+    if (state.booze <= 0) {
+        // Эля нет, бочка пуста — превращаем в пол
+        const c = getCell(adjBarrel.x, adjBarrel.y);
+        if (c) c.type = 'floor';
+        npc.task = { type: 'idle', path: [] };
+        return true;
+    }
+
+    // 2. ПЬЕМ И УНИЧТОЖАЕМ БОЧКУ
+    state.booze -= 1;
+    const barrelCell = getCell(adjBarrel.x, adjBarrel.y);
+    if (barrelCell) {
+        barrelCell.type = 'floor'; // Бочка выпита и исчезает
+        Reg.log(`[Таверна] Бочка опустела и исчезла.`, 'sys');
+    }
+
+    // 3. ЭФФЕКТЫ
+    npc.emo.drunk = Math.min(100, (npc.emo.drunk || 0) + 30);
+    npc.emo.stress = Math.max(0, (npc.emo.stress || 0) - 40);
+    if (npc.longTerm) npc.longTerm.cirrhosis = (npc.longTerm.cirrhosis || 0) + 5;
+    if (npc.longTerm) npc.longTerm.alcoholism = (npc.longTerm.alcoholism || 0) + 10;
+    Reg.log(`${npc.name} отпивает из бочки. Его глаза стекленеют.`, 'sys');
+    
+    npc.task = { type: 'idle', path: [] };
+    return true;
+  }
+
+  if (bestAction.type === 'dig' || bestAction.type === 'chop') {
+    const order = bestAction.order;
+    let adjWall = null;
+    let adjTree = null;
+
+    if (order) {
+        // ЕСТЬ ПРИКАЗ: идем строго к нему
+        if (Math.abs(npc.x - order.x) + Math.abs(npc.y - order.y) === 1) {
+            const c = getCell(order.x, order.y);
+            if (c && (c.type === 'stone' || c.type === 'ore' || c.type === 'coal_ore') && bestAction.type === 'dig') {
+                adjWall = { x: order.x, y: order.y };
+            } else if (c && (c.type === 'tree' || c.type === 'tree_pine') && bestAction.type === 'chop') {
+                adjTree = { x: order.x, y: order.y };
+            } else {
+                // Приказ выполнен или цель изменилась (например, кто-то уже сломал стену)
+                state.playerOrders = state.playerOrders.filter(o => o !== order);
+                npc.task = { type: 'idle', path: [] };
+                return true;
+            }
+        } else {
+            // Не рядом. Прокладываем путь.
+            if (!npc.task.path || npc.task.path.length === 0 || npc.task.ordX !== order.x || npc.task.ordY !== order.y) {
+                const path = window.GameUtils.findPath(npc.x, npc.y, order.x, order.y, 'floor');
+                if (path && path.length > 0) {
+                    npc.task = { type: 'move_to_wall', path: path, ordX: order.x, ordY: order.y };
+                } else {
+                    // Путь заблокирован (стена замурована) — отменяем приказ
+                    if (Math.abs(npc.x - order.x) + Math.abs(npc.y - order.y) > 1) {
+                        Reg.log(`[Приказ] Путь к (${order.x}, ${order.y}) заблокирован. Отмена.`, 'sys');
+                        state.playerOrders = state.playerOrders.filter(o => o !== order);
+                    }
+                    npc.task = { type: 'idle', path: [] };
+                }
+            } else {
+                 // Двигаемся по уже проложенному пути
+                 const nextStep = npc.task.path.shift();
+                 if (nextStep) { npc.x = nextStep.x; npc.y = nextStep.y; }
+            }
+            return true; // Выходим, чтобы не запускать старый поиск BFS
+        }
+    } else {
+        // СТАРАЯ ЛОГИКА: если приказа нет, ищем ближайшую стену/дерево
+        for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+          const c = getCell(npc.x + dx, npc.y + dy);
+          if (c && (c.type === 'stone' || c.type === 'ore' || c.type === 'coal_ore')) { adjWall = { x: npc.x + dx, y: npc.y + dy }; break; }
+        }
+        for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+          const c = getCell(npc.x + dx, npc.y + dy);
+          if (c && (c.type === 'tree' || c.type === 'tree_pine')) { adjTree = { x: npc.x + dx, y: npc.y + dy }; break; }
+        }
+    }
+
+    if (adjTree) {
+      npc.task = { type: 'chop', path: [] };
+      const cell = getCell(adjTree.x, adjTree.y);
+      cell.treeHp = (cell.treeHp || 15);
+      
+      // Проверяем топор
+      const axe = npc.inventory && npc.inventory.find(i => i.tags && i.tags.includes('axe'));
+      let damage = 1; 
+      let toolName = 'голыми руками';
+      
+      if (axe) {
+          // ФИЗИКА: Урон от топора (масса * острота / 2)
+          damage = Math.max(2, Math.floor(((axe.mass || 5) * (axe.sharpness || 3)) / 4));
+          toolName = axe.name;
+          axe.durability -= 1;
+          if (axe.durability <= 0) {
+              Reg.log(`[ПОЛОМКА] ${axe.name} ${npc.name} сломался о ствол!`, 'combat');
+              npc.inventory = npc.inventory.filter(i => i !== axe);
+              if (Reg.fire) Reg.fire('item_broken', npc, axe);
+          }
+          // Логируем удар топором (с вероятностью, чтобы не спамить)
+          if (Math.random() < 0.5) {
+              Reg.log(Reg.generateChopText(npc, true), 'sys');
+          }
+      } else {
+          // Без топора: разбивает руки
+          npc.hp -= 2; 
+          Reg.log(Reg.generateChopText(npc, false), 'sys');
+      }
+      
+      cell.treeHp -= damage;
+      
+      // ДЕРЕВО ПАДАЕТ
+      if (cell.treeHp <= 0) {
+          cell.type = 'floor';
+          const woodCount = 3 + Math.floor(Math.random() * 3); // 3-5 бревен
+          if (!cell.items) cell.items = [];
+          for (let i = 0; i < woodCount; i++) {
+              let newWood;
+              if (typeof window.createItem === 'function') {
+                  newWood = window.createItem('wood');
+              } else {
+                  newWood = { name: 'Бревно', type: 'resource', tags: ['wood', 'fuel'], file: '🪵', isEmoji: true, mass: 8, hardness: 3 };
+              }
+              cell.items.push(newWood);
+          }
+          let fallText = 'Дерево падает!';
+          try {
+              if (Reg.generateTreeFallText) fallText = Reg.generateTreeFallText(npc);
+          } catch(e) {}
+          Reg.log(`${fallText} ${woodCount} бревен падает на пол.`, 'good');
+          Reg.fire('tree_chopped', cell, npc, state);
+      }
+      return true;
+    }
+
+    if (adjWall) {
+      npc.task = { type: 'dig', path: [] };
+      const cell = getCell(adjWall.x, adjWall.y);
+      const wasOre = cell.type === 'ore';
+      const wasCoal = cell.type === 'coal_ore';
+      cell.type = 'floor';
+      
+      // ИЗНОС КИРКИ
+      const pickObj = npc.inventory && npc.inventory.find(i => i.tags && i.tags.includes('pickaxe'));
+      if (pickObj && pickObj.durability > 0) {
+          pickObj.durability -= 1;
+          if (pickObj.durability <= 0) {
+              Reg.log(`[ПОЛОМКА] Кирка ${npc.name} сломалась от долгой работы!`, 'combat');
+              // Превращаем кирку в металлолом
+              pickObj.name = 'Кусок железа';
+              pickObj.tags = ['scrap', 'metal'];
+              pickObj.isEmoji = false;
+              pickObj.file = 'assets/icons/53 question trap.png';
+              pickObj.mass = 2;
+              pickObj.durability = undefined;
+              if (Reg.fire) Reg.fire('item_broken', npc, pickObj);
+          }
+      }
+      // ВЫЗЫВАЕМ СОБЫТИЕ: Игрок копнул камень!
+      Reg.fire('tile_dug', cell, npc, state);
+      
+      // ТЕПЕРЬ РУДА ПАДАЕТ УМЕРЕННО
+      let oreYield = wasOre ? 3 : (wasCoal ? 2 + Math.floor(Math.random() * 2) : 0);
+      
+      // ВМЕСТО АБСТРАКТНОЙ РУДЫ СОЗДАЕМ ФИЗИЧЕСКИЙ ПРЕДМЕТ НА ПОЛУ
+      const c = getCell(adjWall.x, adjWall.y);
+      if (c) {
+         if (!c.items) c.items = [];
+         for (let i = 0; i < oreYield; i++) {
+             let newOre;
+             if (typeof window.createItem === 'function') {
+                 newOre = window.createItem(wasOre ? 'iron_ore' : (wasCoal ? 'coal' : 'stone'));
+             } else {
+                 if (wasOre) newOre = { name: 'Железная руда', type: 'resource', tags: ['iron_ore'], file: '🧱', isEmoji: true, mass: 5 };
+                 else if (wasCoal) newOre = { name: 'Уголь', type: 'resource', tags: ['coal', 'fuel'], file: '⚫', isEmoji: true, mass: 3 };
+                 else newOre = { name: 'Камень', type: 'resource', tags: ['stone'], file: '🪨', isEmoji: true, mass: 5 };
+             }
+             c.items.push(newOre);
+         }
+      }
+      npc.skills.mining = (npc.skills.mining || 0) + 0.05;
+      return true;
+    }
+    
+    if (!npc.task.path || npc.task.path.length === 0) {
+      const queue = [{x: npc.x, y: npc.y, path: []}];
+      const visited = new Set([npc.x + ',' + npc.y]);
+      let pathFound = [];
+      while (queue.length > 0) {
+        const cur = queue.shift();
+        for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+          const nx = cur.x + dx, ny = cur.y + dy;
+          const nk = nx + ',' + ny;
+          const nCell = getCell(nx, ny);
+          if (nCell.type === 'stone' || nCell.type === 'ore' || nCell.type === 'coal_ore') { pathFound = cur.path; queue.length = 0; break; }
+          // ЛЮБАЯ клетка, кроме стены и руды, считается проходимой (включая мебель)
+          if (nCell.type !== 'stone' && nCell.type !== 'ore' && !nCell.monster && !visited.has(nk)) {
+            visited.add(nk);
+            queue.push({x: nx, y: ny, path: [...cur.path, {x: nx, y: ny}]});
+          }
+        }
+      }
+      if (pathFound.length > 0) npc.task = { type: 'move_to_wall', path: pathFound };
+      else npc.task = { type: 'idle', path: [] };
+    }
+    
+    if (npc.task.type === 'move_to_wall' && npc.task.path && npc.task.path.length > 0) {
+      const nextStep = npc.task.path.shift();
+      // ПРОХОДИМ СКВОЗЬ ДРУГИХ
+      npc.x = nextStep.x; 
+      npc.y = nextStep.y;
+    }
+    return true; 
+  }
+
+  if (bestAction.type === 'craft_fishing_rod') {
+    // Тратим 2 бревна
+    let woodRemoved = 0;
+    if (npc.inventory) {
+      npc.inventory = npc.inventory.filter(item => {
+          if (woodRemoved < 2 && item.tags && item.tags.includes('wood')) { woodRemoved++; return false; }
+          return true;
+      });
+    }
+    // Тратим 1 ткань/бинт
+    if (npc.inventory) {
+      let clothIdx = npc.inventory.findIndex(i => i.tags && (i.tags.includes('cloth') || i.tags.includes('bandage')));
+      if (clothIdx !== -1) npc.inventory.splice(clothIdx, 1);
+    }
+
+    const quality = (typeof window.rollQuality === 'function') ? window.rollQuality(npc.skills ? npc.skills.smithing : 0) : 'fine';
+    const rod = (typeof window.createItem === 'function') ? window.createItem('fishing_rod', quality) : { name: 'Удочка', tags: ['tool', 'fishing'], durability: 50 };
+    
+    if (!npc.inventory) npc.inventory = [];
+    npc.inventory.push(rod);
+    
+    Reg.log(npc.name + ' смастерил удочку.', 'sys');
+    Reg.addMemory(npc, 'Я сделал удочку. Может, половить рыбу?', { type: 'joy', power: 10, category: 'craft' });
+    npc.task = { type: 'idle', path: [] };
+    return true;
+  }
+
+  if (bestAction.type === 'make_charcoal') {
+    const _wIdx = npc.inventory ? npc.inventory.findIndex(i => i.tags && i.tags.includes('wood')) : -1;
+    if (_wIdx !== -1) {
+      npc.inventory.splice(_wIdx, 1);
+      const _coal = (typeof window.createItem === 'function') ? window.createItem('coal') : { name: 'Уголь', type: 'resource', tags: ['coal', 'fuel'] };
+      npc.inventory.push(_coal);
+      Reg.log('[Костёр] ' + npc.name + ' пережёг бревно в уголь.', 'sys');
+      Reg.addMemory(npc, 'Я пережёг бревно в уголь. Будет чем топить.', { type: 'joy', power: 5, category: 'craft' });
+    }
+    npc.task = { type: 'idle', path: [] };
+    return true;
+  }
+
+  if (bestAction.type === 'make_bandage') {
+    const _hIdx = npc.inventory ? npc.inventory.findIndex(i => i.tags && i.tags.includes('herb')) : -1;
+    if (_hIdx !== -1) {
+      npc.inventory.splice(_hIdx, 1);
+      const _band = (typeof window.createItem === 'function') ? window.createItem('bandage') : { name: 'Бинт', type: 'misc', tags: ['cloth', 'medical', 'bandage'] };
+      npc.inventory.push(_band);
+      Reg.log('[Костёр] ' + npc.name + ' сделал бинт из травы.', 'sys');
+      Reg.addMemory(npc, 'Я сделал бинт. Раны заживут быстрее.', { type: 'joy', power: 10, category: 'craft' });
+    }
+    npc.task = { type: 'idle', path: [] };
+    return true;
+  }
+
+  if (bestAction.type === 'build') {
+    const ord = bestAction.order;
+    if (!ord || !window.BUILDINGS || !window.BUILDINGS[ord.buildType]) return false;
+    const bData = window.BUILDINGS[ord.buildType];
+    const dist = Math.abs(npc.x - ord.x) + Math.abs(npc.y - ord.y);
+    if (dist > 1) {
+        if (!npc.task.path || npc.task.path.length === 0) {
+            const path = window.GameUtils.findPath(npc.x, npc.y, ord.x, ord.y, 'floor');
+            if (path && path.length > 0) npc.task = { type: 'move_to_wall', path: path };
+            else { npc.task = { type: 'idle', path: [] }; state.playerOrders = state.playerOrders.filter(o => o !== ord); }
+        } else {
+            const nextStep = npc.task.path.shift(); if (nextStep) { npc.x = nextStep.x; npc.y = nextStep.y; }
+        }
+        return true;
+    }
+    for (let res in bData.cost) {
+        let needed = bData.cost[res];
+        if (npc.inventory) {
+            npc.inventory = npc.inventory.filter(item => {
+                if (needed > 0 && (item.id === res || (item.tags && item.tags.includes(res)))) { needed--; return false; }
+                return true;
+            });
+        }
+    }
+    const cell = getCell(ord.x, ord.y);
+    const bDef = window.BUILDINGS[ord.buildType];
+    
+    // УНИВЕРСАЛЬНЫЙ ВЫЗОВ: каждая постройка сама решает, что делать
+    if (bDef && typeof bDef.onBuild === 'function') {
+        bDef.onBuild(cell, npc);
+    } else {
+        Reg.log(`[Стройка] Неизвестный тип: ${ord.buildType}`, 'sys');
+    }
+    
+    state.playerOrders = state.playerOrders.filter(o => o !== ord);
+    npc.task = { type: 'idle', path: [] };
+    return true;
+  }
+
+  if (bestAction.type === 'forage') {
+    let targetFood = null, bestDist = 999;
+    for (let dx = -15; dx <= 15; dx++) {
+      for (let dy = -15; dy <= 15; dy++) {
+        const d = Math.abs(dx) + Math.abs(dy);
+        if (d === 0 || d >= bestDist) continue;
+        const c = getCell(npc.x + dx, npc.y + dy);
+        if (c && (c.type === 'grass_berry' || c.type === 'mushroom')) {
+          targetFood = { x: npc.x + dx, y: npc.y + dy, foodType: c.type };
+          bestDist = d;
+        }
+      }
+    }
+    if (!targetFood) return false;
+    const dist = Math.abs(npc.x - targetFood.x) + Math.abs(npc.y - targetFood.y);
+    if (dist <= 1) {
+      const foodCell = getCell(targetFood.x, targetFood.y);
+      const foodName = targetFood.foodType === 'mushroom' ? 'гриб' : 'ягоды';
+      foodCell.type = 'floor';
+      if (!npc.inventory) npc.inventory = [];
+      const itemId = targetFood.foodType === 'mushroom' ? 'mushroom' : 'berry';
+      const newFood = (typeof window.createItem === 'function') ? window.createItem(itemId) : { name: foodName, tags: ['edible'], calories: 15 };
+      npc.inventory.push(newFood);
+      Reg.log(`${npc.name} собрал ${foodName}.`, 'good');
+      Reg.addMemory(npc, `Я собрал ${foodName}. Пригодится.`, { type: 'joy', power: 5, category: 'food' });
+      npc.task = { type: 'idle', path: [] };
+    } else {
+      if (!npc.task.path || npc.task.path.length === 0) {
+        const path = window.GameUtils.findPath(npc.x, npc.y, targetFood.x, targetFood.y, 'floor');
+        if (path && path.length > 0) npc.task = { type: 'move_to_wall', path: path };
+        else { npc.task = { type: 'idle', path: [] }; return false; }
+      } else {
+        const nextStep = npc.task.path.shift();
+        if (nextStep) { npc.x = nextStep.x; npc.y = nextStep.y; }
+      }
+    }
+    return true;
+  }
+
+  if (bestAction.type === 'craft_job') {
+    const _job = bestAction.job;
+    if (!_job || _job.count <= 0) {
+      if (_job) {
+        if (_job.claimedBy) _job.claimedBy = _job.claimedBy.filter(e => e.id !== npc.id);
+        state.craftQueue = state.craftQueue.filter(j => j !== _job);
+      }
+      npc.task = { type: 'idle', path: [] };
+      return true;
+    }
+    
+    const _recipe = window.CRAFTABLES[_job.id];
+    if (!_recipe) {
+      state.craftQueue = state.craftQueue.filter(j => j !== _job);
+      npc.task = { type: 'idle', path: [] };
+      return true;
+    }
+
+    // Стоим ли у наковальни?
+    let _atForge = false;
+    for (let _dx = -1; _dx <= 1 && !_atForge; _dx++) {
+      for (let _dy = -1; _dy <= 1; _dy++) {
+        const _fc = getCell(npc.x + _dx, npc.y + _dy);
+        if (_fc && (_fc.type === 'forge' || _fc.type === 'anvil')) { _atForge = true; break; }
+      }
+    }
+
+    if (!_atForge) {
+      // Идём к наковальне
+      if (npc.task.type !== 'go_to_craft' || !npc.task.path || npc.task.path.length === 0) {
+        let _forge = null, _bestD = 999;
+        for (let _k in state.cells) {
+          const _c = state.cells[_k];
+          if (_c.type === 'forge' || _c.type === 'anvil') {
+            const [_fx, _fy] = _k.split(',').map(Number);
+            const _d = Math.abs(npc.x - _fx) + Math.abs(npc.y - _fy);
+            if (_d < _bestD) { _forge = { x: _fx, y: _fy }; _bestD = _d; }
+          }
+        }
+        if (!_forge) {
+          Reg.log(`[Кузня] ${npc.name}: нет наковальни.`, 'sys');
+          npc.task = { type: 'idle', path: [] };
+          return true;
+        }
+        const _path = window.GameUtils.findPath(npc.x, npc.y, _forge.x, _forge.y, 'floor');
+        if (_path && _path.length > 0) {
+          npc.task = { type: 'go_to_craft', path: _path };
+        } else {
+          npc.task = { type: 'idle', path: [] };
+        }
+      }
+      return true;
+    }
+
+    // У наковальни — проверяем ресурсы
+    if (!window.canCraft || !window.canCraft(npc, _job.id)) {
+      if (_job.claimedBy) _job.claimedBy = _job.claimedBy.filter(e => e.id !== npc.id);
+      Reg.log(`[Кузня] ${npc.name}: ресурсы пропали. Откладываем ${_recipe.name}.`, 'sys');
+      npc.task = { type: 'idle', path: [] };
+      return true;
+    }
+
+    // Списываем + создаём
+    if (window.consumeResources) window.consumeResources(npc, _job.id);
+    const _quality = (typeof window.rollQuality === 'function') ? window.rollQuality(npc.skills ? npc.skills.smithing : 0) : 'fine';
+    const _newItem = (typeof window.createItem === 'function') ? window.createItem(_job.id, _quality) : { name: _recipe.name };
+
+    // Кладём на пол рядом (игрок увидит результат)
+    const _dropCell = getCell(npc.x, npc.y);
+    if (_dropCell) {
+      if (!_dropCell.items) _dropCell.items = [];
+      _dropCell.items.push(_newItem);
+    } else if (npc.inventory) {
+      // Fallback: если клетки нет — в рюкзак
+      npc.inventory.push(_newItem);
+    }
+
+    // Очередь + освобождаем claim
+    _job.count--;
+    if (_job.claimedBy) {
+      _job.claimedBy = _job.claimedBy.filter(e => e.id !== npc.id);
+      if (_job.claimedBy.length > _job.count) _job.claimedBy = _job.claimedBy.slice(0, Math.max(0, _job.count));
+    }
+    if (_job.count <= 0) state.craftQueue = state.craftQueue.filter(j => j !== _job);
+
+    const _qName = (_newItem.qualityName || _quality);
+    
+    // === ЭМОЦИЯ ПО КАЧЕСТВУ + ХАРАКТЕРУ ===
+    const QUALITY_JOY = {
+      masterwork: 50, exceptional: 30, superior: 20,
+      fine: 15, ordinary: 5, shoddy: -10, broken: -30
+    };
+    let _baseJoy = QUALITY_JOY[_quality] !== undefined ? QUALITY_JOY[_quality] : 5;
+    let _facetMod = 0;
+    
+    if (npc.facets) {
+      if (npc.facets.aesthetics > 70) _facetMod -= 20;
+      if (npc.facets.aesthetics < 30) _facetMod += 10;
+      if (npc.facets.diligence > 70) _facetMod -= 10;
+      if (npc.facets.diligence < 30) _facetMod += 15;
+      if (npc.facets.ambition > 70) _facetMod -= 15;
+      if (npc.facets.anxiety > 70) _facetMod -= 10;
+    }
+    if (npc.trait && npc.trait.id === 'lazy') _facetMod += 15;
+    if (npc.trait && npc.trait.id === 'hardworking') _facetMod -= 10;
+    
+    const _totalJoy = _baseJoy + _facetMod;
+    let _emoType, _emoPower, _memoryText, _logClass;
+    
+    if (_totalJoy >= 30) {
+      _emoType = 'joy'; _emoPower = _totalJoy;
+      _memoryText = `Я создал ${_newItem.name} (${_qName}). Горжусь собой.`;
+      _logClass = 'good';
+    } else if (_totalJoy >= 0) {
+      _emoType = 'joy'; _emoPower = Math.max(1, _totalJoy);
+      _memoryText = `Неплохая работа. ${_newItem.name} (${_qName}) сойдёт.`;
+      _logClass = 'sys';
+    } else {
+      _emoType = 'sadness'; _emoPower = -_totalJoy;
+      _memoryText = `Это не то, чего я хотел. ${_newItem.name} (${_qName}) вышел плохим.`;
+      _logClass = 'combat';
+    }
+    
+    Reg.log(`[Кузня] ${npc.name} выковал ${_newItem.name} (${_qName}) и положил рядом.`, _logClass);
+    Reg.addMemory(npc, _memoryText, { type: _emoType, power: _emoPower, category: 'craft' });
+    if (npc.skills) npc.skills.smithing = (npc.skills.smithing || 0) + 0.5;
+
+    npc.task = { type: 'idle', path: [] };
+    return true;
+  }
+
+  if (bestAction.type === 'haul') {
+    const _myCell = getCell(npc.x, npc.y);
+    if (_myCell && _myCell.items && _myCell.items.length > 0) {
+      npc.task = { type: 'idle', path: [] };
+      npc._pickupDelay = 0;
+      return true;
+    }
+    let _tg = null, _bd = 999;
+    if (bestAction.order) {
+        _tg = { x: bestAction.order.x, y: bestAction.order.y };
+    } else {
+        for (let _dx = -5; _dx <= 5; _dx++) {
+          for (let _dy = -5; _dy <= 5; _dy++) {
+            const _d = Math.abs(_dx) + Math.abs(_dy);
+            if (_d === 0 || _d >= _bd) continue;
+            const _c = getCell(npc.x + _dx, npc.y + _dy);
+            if (_c && _c.items && _c.items.length > 0) { _tg = { x: npc.x + _dx, y: npc.y + _dy }; _bd = _d; }
+          }
+        }
+    }
+    if (_tg) {
+      const _p = window.GameUtils.findPath(npc.x, npc.y, _tg.x, _tg.y, 'floor');
+      if (_p && _p.length > 0) npc.task = { type: 'go_to_haul', path: _p };
+      else npc.task = { type: 'idle', path: [] };
+    } else npc.task = { type: 'idle', path: [] };
+    return true;
+  }
+  if (bestAction.type === 'eat_item') {
+    if (!npc.inventory) { npc.task = { type: 'idle', path: [] }; return true; }
+    const foodIdx = npc.inventory.findIndex(i => i.tags && i.tags.includes('edible'));
+    if (foodIdx !== -1) {
+      const food = npc.inventory[foodIdx];
+      npc.inventory.splice(foodIdx, 1);
+      npc.hunger = Math.max(0, npc.hunger - 40);
+      npc.hp = Math.min(npc.maxHp, npc.hp + (food.calories || 10));
+      if (food.poisonChance && Math.random() < food.poisonChance) {
+        npc.hp -= 15;
+        npc.emo.stress = Math.min(100, (npc.emo.stress || 0) + 20);
+        Reg.log(`${npc.name} отравился, съев ${food.name}!`, 'combat');
+        Reg.addMemory(npc, `Я отравился ${food.name}. Живот болит.`, { type: 'fear', power: 20, category: 'food' });
+      } else {
+        Reg.log(`${npc.name} съел ${food.name} из рюкзака.`, 'good');
+        Reg.addMemory(npc, `Я съел ${food.name}. Утолил голод.`, { type: 'joy', power: 5, category: 'food' });
+      }
+    }
+    npc.task = { type: 'idle', path: [] };
+    return true;
+  }
+
+  if (bestAction.type === 'eat_corpse') {
+    let targetCorpse = null, bestDist = 999;
+    for (let dx = -10; dx <= 10; dx++) {
+      for (let dy = -10; dy <= 10; dy++) {
+        const d = Math.abs(dx) + Math.abs(dy);
+        if (d === 0 || d >= bestDist) continue;
+        const c = getCell(npc.x + dx, npc.y + dy);
+        if (c && c.corpse) { targetCorpse = { x: npc.x + dx, y: npc.y + dy }; bestDist = d; }
+      }
+    }
+    if (!targetCorpse) { npc.task = { type: 'idle', path: [] }; return true; }
+    const distC = Math.abs(npc.x - targetCorpse.x) + Math.abs(npc.y - targetCorpse.y);
+    if (distC <= 1) {
+      const c = getCell(targetCorpse.x, targetCorpse.y);
+      const corpseName = c.corpse.name || 'труп';
+      c.corpse = null;
+      npc.hunger = Math.max(0, npc.hunger - 60);
+      npc.hp -= 5;
+      Reg.log(`${npc.name} съел труп ${corpseName}. Это было отвратительно.`, 'combat');
+      Reg.addMemory(npc, `Я съел труп ${corpseName}. Что я стал...`, { type: 'sadness', power: 25, category: 'taboo' });
+      if (Math.random() < 0.3) {
+        if (!npc.infections) npc.infections = [];
+        if (!npc.infections.includes('bacteria')) {
+          npc.infections.push('bacteria');
+          Reg.log(`${npc.name} заразился, съев падаль.`, 'combat');
+        }
+      }
+    } else {
+      if (!npc.task.path || npc.task.path.length === 0) {
+        const path = window.GameUtils.findPath(npc.x, npc.y, targetCorpse.x, targetCorpse.y, 'floor');
+        if (path && path.length > 0) npc.task = { type: 'move_to_wall', path: path };
+        else npc.task = { type: 'idle', path: [] };
+      } else {
+        const nextStep = npc.task.path.shift();
+        if (nextStep) { npc.x = nextStep.x; npc.y = nextStep.y; }
+      }
+    }
+    return true;
+  }
+
+  if (bestAction.type === 'eat_dwarf_corpse') {
+    let targetBody = null, bestDist = 999;
+    for (let dx = -12; dx <= 12; dx++) {
+      for (let dy = -12; dy <= 12; dy++) {
+        const d = Math.abs(dx) + Math.abs(dy);
+        if (d === 0 || d >= bestDist) continue;
+        const c = getCell(npc.x + dx, npc.y + dy);
+        if (c && c.dead_bodies && c.dead_bodies.length > 0) {
+          targetBody = { x: npc.x + dx, y: npc.y + dy };
+          bestDist = d;
+        }
+      }
+    }
+    if (!targetBody) { npc.task = { type: 'idle', path: [] }; return true; }
+    const distB = Math.abs(npc.x - targetBody.x) + Math.abs(npc.y - targetBody.y);
+    if (distB <= 1) {
+      const c = getCell(targetBody.x, targetBody.y);
+      const body = c.dead_bodies.pop();
+      if (c.dead_bodies.length === 0) delete c.dead_bodies;
+      npc.hunger = Math.max(0, npc.hunger - 80);
+      npc.emo.stress = Math.min(100, (npc.emo.stress || 0) + 50);
+      npc.hp -= 8;
+      Reg.log(`${npc.name} съел тело ${body.name}. Это чудовищно.`, 'death');
+      Reg.addMemory(npc, `Я съел тело ${body.name}. Что я стал...`, { type: 'fear', power: 60, category: 'taboo' });
+      for (const other of state.npcs) {
+        if (!other.alive || other.id === npc.id) continue;
+        const d2 = Math.abs(other.x - targetBody.x) + Math.abs(other.y - targetBody.y);
+        if (d2 <= 5) {
+          other.emo.stress = Math.min(100, (other.emo.stress || 0) + 30);
+          Reg.addMemory(other, `Я видел(а), как ${npc.name} съел(а) ${body.name}.`, { type: 'fear', power: 40, category: 'witness' });
+        }
+      }
+      if (Math.random() < 0.5) {
+        if (!npc.infections) npc.infections = [];
+        if (!npc.infections.includes('bacteria')) {
+          npc.infections.push('bacteria');
+          Reg.log(`${npc.name} заразился от каннибализма.`, 'combat');
+        }
+      }
+    } else {
+      if (!npc.task.path || npc.task.path.length === 0) {
+        const path = window.GameUtils.findPath(npc.x, npc.y, targetBody.x, targetBody.y, 'floor');
+        if (path && path.length > 0) npc.task = { type: 'move_to_wall', path: path };
+        else npc.task = { type: 'idle', path: [] };
+      } else {
+        const nextStep = npc.task.path.shift();
+        if (nextStep) { npc.x = nextStep.x; npc.y = nextStep.y; }
+      }
+    }
+    return true;
+  }
+
+  const targets = { 
+    eat: { x: 0, y: -1, cellType: 'pot' }, 
+    deposit: { x: 0, y: 1, cellType: 'storage' }, 
+    rest: { x: -1, y: 0, cellType: 'bed' },
+    socialize: { x: -1, y: -1, cellType: 'table' }
+  };
+  const t = targets[bestAction.type];
+  if (!t) { npc.task = { type: "idle", path: [] }; return true; }
+  const dist = Math.abs(npc.x - t.x) + Math.abs(npc.y - t.y);
+
+  if (dist <= 1) {
+    if (bestAction.type === 'eat') { 
+      if (state.food > 0) { state.food--; npc.hunger = 0; npc.hp = Math.min(npc.maxHp, npc.hp + 20); } 
+      npc.task = { type: 'idle', path: [] }; return true; 
+    }
+    // ОБРАБОТКА КРАФТА КИРКИ
+  if (bestAction.type === 'craft_pickaxe') {
+      // Удаляем 3 руды из массива рюкзака
+      let removed = 0;
+      if (npc.inventory) {
+          npc.inventory = npc.inventory.filter(item => {
+              if (removed < 3 && item.tags && item.tags.includes('iron_ore')) {
+                  removed++;
+                  return false; // удаляем
+              }
+              return true;
+          });
+      }
+      
+      if (!npc.inventory) npc.inventory = [];
+      if (!npc.inventory.find(i => i.tags && i.tags.includes('pickaxe'))) {
+          let _newPick = (typeof window.createItem === 'function') ? window.createItem('pickaxe') : { name: 'Железная кирка', type: 'tool', tags: ['tool', 'pickaxe', 'metal', 'weapon'], file: '⛏️', isEmoji: true, mass: 5, hardness: 8, durability: 100, dmgMod: 5 };
+      npc.inventory.push(_newPick);
+      }
+      npc.broken_pickaxe_logged = false;
+      
+      Reg.log(`[Кузня] ${npc.name} выковал новую кирку на наковальне.`, 'good');
+      Reg.addMemory(npc, `Я выковал кирку. Теперь можно копать.`, { type: 'joy', power: 15, category: 'craft' });
+      
+      npc.task = { type: 'idle', path: [] };
+      return true;
+  }
+
+  if (bestAction.type === 'deposit') { 
+      // ВЫВАЛИВАЕМ РУДУ ИЗ РЮКЗАКА НА СКЛАД
+      if (npc.inventory) {
+          const oreItems = npc.inventory.filter(i => i.tags && i.tags.includes('iron_ore'));
+          if (oreItems.length > 0) {
+              const c = getCell(t.x, t.y);
+              if (!c.items) c.items = [];
+              
+              // Оставляем 3 руды, если кирка сломана (нужно на крафт)
+              let hasPickaxe = npc.inventory.find(i => i.tags && i.tags.includes('pickaxe'));
+              let needsPickaxe = !hasPickaxe || (hasPickaxe.durability !== undefined && hasPickaxe.durability <= 0);
+              
+              let oreToDeposit = [...oreItems];
+              if (needsPickaxe && oreToDeposit.length >= 3) {
+                  oreToDeposit.splice(0, 3); // Оставляем 3
+              } else if (needsPickaxe) {
+                  oreToDeposit = []; // Оставляем все, если их меньше 3
+              }
+              
+              if (oreToDeposit.length > 0) {
+                  oreToDeposit.forEach(item => c.items.push(item));
+                  oreToDeposit.forEach(item => {
+                      const idx = npc.inventory.indexOf(item);
+                      if (idx !== -1) npc.inventory.splice(idx, 1);
+                  });
+                  Reg.log(`[Склад] ${npc.name} сдал ${oreToDeposit.length} руды на склад.`, 'good');
+              } else if (needsPickaxe) {
+                  Reg.log(`[Склад] ${npc.name} оставляет руду для крафта новой кирки.`, 'sys');
+              }
+          }
+      }
+      npc.task = { type: 'idle', path: [] }; return true; 
+    }
+    if (bestAction.type === 'rest') { 
+      npc.hp = Math.min(npc.maxHp, npc.hp + 15); 
+      npc.fatigue = Math.max(0, npc.fatigue - 20); // Восстанавливаем усталость
+      npc.task = { type: 'rest', path: [] }; return true; 
+    }
+    if (bestAction.type === 'socialize') {
+      npc.socialNeed = Math.max(0, npc.socialNeed - 30);
+      npc.emo.stress = Math.max(0, npc.emo.stress - 15);
+      npc.emo.joy = Math.min(100, npc.emo.joy + 10);
+      if (Math.random() < 0.2) Reg.log(`${npc.name} сидит за столом и отдыхает в компании.`, 'sys');
+      npc.task = { type: 'socialize', path: [] }; return true;
+    }
+  }
+
+  // === РЫБАЛКА ===
+  if (bestAction.type === 'fishing') {
+    const _t = bestAction.target;
+    if (!_t) { npc.task = { type: 'idle', path: [] }; return true; }
+    const _dist = Math.abs(npc.x - _t.x) + Math.abs(npc.y - _t.y);
+
+    if (_dist > 1) {
+      if (npc.task.type !== 'go_to_fishing' || !npc.task.path || npc.task.path.length === 0) {
+        const _path = window.GameUtils.findPath(npc.x, npc.y, _t.x, _t.y, 'floor');
+        if (_path && _path.length > 0) npc.task = { type: 'go_to_fishing', path: _path, target: _t };
+        else npc.task = { type: 'idle', path: [] };
+      }
+      return true;
+    }
+
+    // Уже у воды
+    const _cell = getCell(_t.x, _t.y);
+    if (!_cell || _cell.type !== 'water' || !_cell.water) { npc.task = { type: 'idle', path: [] }; return true; }
+
+    const _rod = npc.inventory && npc.inventory.find(i => i.tags && i.tags.includes('fishing'));
+    if (!_rod) { npc.task = { type: 'idle', path: [] }; return true; }
+
+    // Износ
+    _rod.durability = (_rod.durability || 0) - 1;
+    if (_rod.durability <= 0) {
+      npc.inventory = npc.inventory.filter(i => i !== _rod);
+      Reg.log(npc.name + ' сломал удочку.', 'combat');
+      if (Reg.fire) Reg.fire('item_broken', npc, _rod);
+      npc.task = { type: 'idle', path: [] };
+      return true;
+    }
+
+    // Шанс улова (по свойствам)
+    const _skill = (npc.skills && npc.skills.fishing) || 0;
+    const _w = _cell.water;
+    let _rodBonus = 0;
+    if (_rod.quality === 'masterwork') _rodBonus = 15;
+    else if (_rod.quality === 'exceptional') _rodBonus = 10;
+    else if (_rod.quality === 'superior') _rodBonus = 5;
+    else if (_rod.quality === 'shoddy') _rodBonus = -10;
+    else if (_rod.quality === 'broken') _rodBonus = -20;
+
+    const _depthPenalty = ((_w.depth || 1) - 1) * 10;
+    let _chance = 30 + _skill * 5 + _rodBonus - _depthPenalty;
+    if (_w.fishPopulation <= 0) _chance = 0;
+
+    const _roll = Math.random() * 100;
+    let _result = 'miss';
+
+    if (_roll < _chance) {
+      _result = 'catch';
+      _w.fishPopulation = Math.max(0, _w.fishPopulation - 1);
+      const _fish = (typeof window.createItem === 'function') ? window.createItem('fish') : { name: 'Рыба', tags: ['fish', 'raw', 'edible'], calories: 25 };
+      if (!npc.inventory) npc.inventory = [];
+      npc.inventory.push(_fish);
+      npc.skills.fishing = (npc.skills.fishing || 0) + 0.5;
+    } else if (_roll < _chance + 20) {
+      _result = 'junk';
+    }
+
+    // Атомарный текст
+    let _text = '';
+    if (Reg.generateFishingText) {
+      _text = Reg.generateFishingText(npc, _result, _w.fishType);
+    } else {
+      _text = npc.name + (_result === 'catch' ? ' поймал рыбу.' : ' ничего не поймал.');
+    }
+    Reg.log(_text, _result === 'catch' ? 'good' : 'sys');
+
+    if (_result === 'catch') Reg.addMemory(npc, 'Хороший улов. Рыба бьётся в руках.', { type: 'joy', power: 10, category: 'fishing' });
+    else if (_result === 'miss') Reg.addMemory(npc, 'Рыба не клюёт.', { type: 'sadness', power: 3, category: 'fishing' });
+
+    npc.task = { type: 'idle', path: [] };
+    return true;
+  }
+
+  if (npc.task.type !== 'go_to_' + bestAction.type || !npc.task.path || npc.task.path.length === 0) {
+    const path = window.GameUtils.findPath(npc.x, npc.y, t.x, t.y, t.cellType);
+    if (path && path.length > 0) npc.task = { type: 'go_to_' + bestAction.type, path };
+    else { npc.task = { type: 'wander', path: [] }; return true; }
+  }
+
+  if (npc.task.path && npc.task.path.length > 0) {
+    const nextStep = npc.task.path.shift();
+    if (!state.npcs.find(n => n.alive && n.x === nextStep.x && n.y === nextStep.y)) {
+      npc.x = nextStep.x; npc.y = nextStep.y;
+    } else npc.task.path = []; 
+  }
+  return true;
+});

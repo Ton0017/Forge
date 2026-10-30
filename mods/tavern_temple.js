@@ -1,11 +1,5 @@
 // Отрисовка объектов
-Reg.tile('beer_tap', (ctx,sx,sy,seed) => {
-  Reg.tiles['floor'](ctx,sx,sy,seed);
-  ctx.fillStyle='#4a2a10'; ctx.fillRect(sx+8, sy+12, 16, 18); // Бочка
-  ctx.fillStyle='#2a1a10'; ctx.fillRect(sx+8, sy+12, 16, 2); ctx.fillRect(sx+8, sy+28, 16, 2);
-  ctx.fillStyle='#e0c060'; ctx.fillRect(sx+14, sy+18, 4, 4); // Краник
-  ctx.fillStyle='#a06030'; ctx.fillRect(sx+12, sy+24, 8, 4); // Лужа
-});
+/* beer_tap рисуется в booze_sprite.js как ale.png */
 
 Reg.tile('bar_snack', (ctx,sx,sy,seed) => {
   Reg.tiles['floor'](ctx,sx,sy,seed);

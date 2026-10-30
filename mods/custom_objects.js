@@ -2,16 +2,16 @@ setTimeout(() => {
   // Карта объектов: ID -> файл, размеры и смещение
   const objectSprites = {
     'bed':      { file: 'кровать.png', w: 24, h: 48, ox: 4, oy: -16 },
-    'altar':    { file: 'алтарь.png', w: 24, h: 48, ox: 4, oy: -16 },
-    'storage':  { file: 'склад.png', w: 32, h: 32, ox: 0, oy: 0 },
+    'altar':    { file: 'altar.png', w: 24, h: 48, ox: 4, oy: -16 },
+    'storage':  { file: 'chest.png', w: 32, h: 32, ox: 0, oy: 0 },
     
     // Остальные (24x24) центрируем в клетке 32x32
     'pot':      { file: 'котел.png', w: 24, h: 24, ox: 4, oy: 4 },
-    'forge':    { file: 'наковальня.png', w: 24, h: 24, ox: 4, oy: 4 },
-    'alchemy':  { file: 'стол для алхимии.png', w: 24, h: 24, ox: 4, oy: 4 },
-    'table':    { file: 'стол.png', w: 24, h: 24, ox: 4, oy: 4 },
-    'bar_snack':{ file: 'закуски.png', w: 24, h: 24, ox: 4, oy: 4 },
-    'beer_tap': { file: 'бочка.png', w: 24, h: 24, ox: 4, oy: 4 },
+    'forge':    { file: 'forge.png', w: 24, h: 24, ox: 4, oy: 4 },
+    'alchemy':  { file: 'magic table.png', w: 24, h: 24, ox: 4, oy: 4 },
+    'table':    { file: 'table.png', w: 24, h: 24, ox: 4, oy: 4 },
+    'bar_snack':{ file: 'table with snacks.png', w: 24, h: 24, ox: 4, oy: 4 },
+    // 'beer_tap' убран (рисуется в booze_sprite.js как ale.png)
     'campfire': { file: 'костер.png', w: 24, h: 24, ox: 4, oy: 4 },
     'mushroom': { file: 'грибы.png', w: 24, h: 24, ox: 4, oy: 4 }
   };
@@ -44,4 +44,4 @@ setTimeout(() => {
       }
     });
   }
-}, 1500);
+}, 3000);

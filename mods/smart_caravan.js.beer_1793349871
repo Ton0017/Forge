@@ -1,0 +1,446 @@
+(function(){
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  const fill = (tpl, data) => tpl.replace(/{{(\w+)}}/g, (m, key) => data[key] || m);
+
+  function generateSpeech(trader, type, data = {}) {
+    const lex = Reg.caravanLex || {};
+    let templates = lex.templates && lex.templates[type] ? lex.templates[type] : null;
+    if (!templates) { console.warn("Нет шаблона для типа:", type, "Лексикон:", lex); return "Он что-то бормочет. (Шаблон " + type + " не найден)"; }
+    let tpl = pick(templates);
+    let baseData = {
+      name: trader.name,
+      verb: pick(lex['verbs_' + type] || lex.verbs || ["делает"]),
+      verb_greet: pick(lex.verbs_greet || lex.verbs || ["прибывает"]),
+      verb_accept: pick(lex.verbs_accept || lex.verbs || ["кивает"]),
+      verb_reject: pick(lex.verbs_reject || lex.verbs || ["морщится"]),
+      verb_demand: pick(lex.verbs_demand || lex.verbs || ["требует"]),
+      verb_counter: pick(lex.verbs_counter || lex.verbs || ["торгуется"]),
+      context: pick(lex.contexts || ["откуда-то"]),
+      noun: pick(lex.nouns || ["товар"]),
+      absurd: pick(lex.absurd || ["Он молчит."]),
+      item: data.item || "предмет",
+      demandItem: data.demandItem || "что-то"
+    };
+    let res = fill(tpl, baseData);
+    if (res.includes('undefined')) return "Он что-то бормочет себе под нос.";
+    return res;
+  }
+
+  Reg.on('world_init', (state) => {
+    state.caravan = null;
+    state.caravanCooldown = 0;
+    state.lastCaravanTick = 0;
+  });
+
+  // ФУНКЦИЯ СОЗДАНИЯ КАРАВАНА
+  function spawnCaravan(state) {
+      const lex = Reg.caravanLex || {};
+      const facets = {
+        greed: Math.floor(Math.random() * 100),
+        generosity: Math.floor(Math.random() * 100),
+        paranoia: Math.floor(Math.random() * 100),
+        curiosity: Math.floor(Math.random() * 100)
+      };
+      let preferredTag = null;
+      if (facets.curiosity > 70) preferredTag = 'magic';
+      else if (facets.paranoia > 70) preferredTag = 'armor';
+      else if (facets.greed > 70) preferredTag = 'iron_ore';
+      
+      state.caravan = {
+        name: pick(lex.firstNames || ["Торговец"]) + " " + pick(lex.titles || ["Странник"]),
+        gold: 1000 + Math.floor(Math.random() * 1000),
+        stayTimer: 150, booze: 30, facets: facets, preferredTag: preferredTag, mood: 50,
+        currentOffer: [], demandedItems: [], obsessionItem: null, goods: []
+      };
+
+      // ЭМЕРДЖЕНТНЫЙ АССОРТИМЕНТ
+      let possibleGoods = [];
+      
+      // 1. Базовые товары (еда нужна всем)
+      possibleGoods.push({ name: 'Паёк', basePrice: 15, type: 'food', amount: 10, file: 'assets/objects/закуски.png' });
+      possibleGoods.push({ name: 'Сырое мясо', basePrice: 10, type: 'food', amount: 5, spawnTag: 'meat', file: 'assets/animals/boar.png' });
+      possibleGoods.push({ name: 'Семена пшеницы', basePrice: 5, type: 'resource', spawnTag: 'seeds', file: 'assets/icons/53 question trap.png' });
+      
+      // 2. Паранойя -> привозит защиту
+      if (facets.paranoia > 40) {
+          possibleGoods.push({ name: 'Кожаный доспех', basePrice: 40, type: 'armor', spawnTag: 'armor', file: 'assets/equipment/leather tunic.png' });
+          possibleGoods.push({ name: 'Железный шлем', basePrice: 50, type: 'armor', spawnTag: 'armor', file: 'assets/equipment/iron helmet.png' });
+      }
+      
+      // 3. Жадность -> привозит дорогие ресурсы
+      if (facets.greed > 40) {
+          possibleGoods.push({ name: 'Железный слиток', basePrice: 25, type: 'resource', spawnTag: 'iron_ore', file: 'assets/equipment/iron can.png' });
+          possibleGoods.push({ name: 'Самоцветы', basePrice: 60, type: 'resource', spawnTag: 'gem', file: 'assets/icons/117 blue and red diamond ore .png' });
+      }
+      
+      // 4. Любимый тег (Одержимость) -> привозит то, что любит
+      if (preferredTag) {
+          possibleGoods.push({ name: 'Амулет ' + preferredTag, basePrice: 30, type: 'accessory', spawnTag: preferredTag, file: 'assets/equipment/amulet of power.png' });
+      } else {
+          possibleGoods.push({ name: 'Стальной меч', basePrice: 80, type: 'weapon', spawnTag: 'weapon', file: 'assets/equipment/thick iron sword.png' });
+      }
+
+      // ФОРМИРУЕМ ЦЕНУ НА ОСНОВЕ ХАРАКТЕРА
+      let greedMult = 1.0 + (facets.greed / 100); // Жадность 50 = +50% к цене
+      let moodDiscount = 0; // При спавне настроение 50, скидки нет, но формула готова
+      
+      for (let i = 0; i < 3; i++) {
+          let template = possibleGoods[Math.floor(Math.random() * possibleGoods.length)];
+          let finalPrice = Math.floor(template.basePrice * greedMult * (1.0 - moodDiscount));
+          if (finalPrice < 1) finalPrice = 1;
+          let good = { ...template, price: finalPrice };
+          state.caravan.goods.push(good);
+      }
+      
+      // СПАВН NPC
+      let spawnX = state.forgePos.x;
+      let spawnY = state.forgePos.y;
+      let foundSpot = false;
+      for (let r = 1; r <= 5 && !foundSpot; r++) {
+        for (let dx = -r; dx <= r && !foundSpot; dx++) {
+          for (let dy = -r; dy <= r && !foundSpot; dy++) {
+            const cell = getCell(spawnX + dx, spawnY + dy);
+            if (cell && cell.type === 'floor' && !state.npcs.find(n => n.alive && n.x === spawnX+dx && n.y === spawnY+dy)) {
+              spawnX += dx; spawnY += dy; foundSpot = true;
+            }
+          }
+        }
+      }
+      if (state.caravan) {
+          const caravanNpc = {
+            id: 'caravan_npc_' + Date.now(),
+            name: state.caravan.name,
+            skinFile: 'caravan.png',
+            alive: true, x: spawnX, y: spawnY,
+            hp: 200, maxHp: 200, blood: 100,
+            hunger: 0, thirst: 0, fatigue: 0, socialNeed: 0,
+            isCaravanTrader: true,
+            profession: { id: 'trader', name: 'Торговец' },
+            trait: { id: 'greedy', name: 'Жадный' },
+            task: { type: 'idle', path: [] },
+            emo: { stress: 0, joy: 50, fear: 0, drunk: 0 },
+            facets: state.caravan.facets, speed: 0.3,
+            longTerm: { alcoholism: 0, cirrhosis: 0 },
+            memory: { shortTerm: [], longTerm: [] },
+            relations: {},
+            inventory: []
+          };
+          state.npcs.push(caravanNpc);
+          state.caravan.npcId = caravanNpc.id;
+      }
+      state.caravan.lastSpeech = generateSpeech(state.caravan, 'greet');
+      Reg.log(`[Караван] Прибыл ${state.caravan.name}.`, 'good');
+      state.lastCaravanTick = state.tick;
+  }
+
+  Reg.on('tick', (state) => {
+    if (state.tick === 0) return;
+    
+    // 1. ОБРАБОТКА УЖЕ ПРИБЫВШЕГО КАРАВАНА
+    if (state.caravan) {
+      state.caravan.stayTimer--;
+      if (state.caravan.stayTimer <= 0 || state.caravan.mood <= 0) {
+        const panel = document.getElementById('panel-trade');
+        if (panel && panel.classList.contains('active')) { closePanels(); } Reg.log(`[Караван] ${state.caravan.name} уехал.`, 'sys');
+        
+        // УДАЛЯЕМ NPC ТОРГОВЦА (ГАРАНТИРОВАННО)
+        state.npcs = state.npcs.filter(n => n.id !== state.caravan.npcId && !n.isCaravanTrader);
+        
+        Reg.log(`[Караван] ${state.caravan.name} уехал.`, 'sys');
+        state.caravan = null;
+        state.caravanCooldown = state.tick + 120;
+      }
+      return;
+    }
+
+    // 2. ЭМЕРДЖЕНТНАЯ ПРОВЕРКА ПРИЕЗДА (Раз в 50 тиков)
+    if (state.tick % 50 !== 0) return;
+    if (state.caravanCooldown && state.tick < state.caravanCooldown) return;
+
+    // БАЗОВЫЙ ШАНС (было 0.01 = 1%, стало 0.08 = 8%)
+    let chance = 0.08;
+    
+    // БОГАТСТВО (сложно)
+    if (state.gold > 500) chance += 0.05;
+    if (state.gold > 2000) chance += 0.10;
+    
+    // МАГИЯ (коллекционеры)
+    let magicItems = 0;
+    for (let k in state.cells) {
+        if (state.cells[k].items) magicItems += state.cells[k].items.filter(i => i.tags && i.tags.includes('magic')).length;
+    }
+    if (magicItems > 0) chance += 0.15;
+    
+    // СЛУХИ
+    if (window.dwarvenRumors && window.dwarvenRumors.length > 3) chance += 0.05;
+
+    // НАСЕЛЕНИЕ
+    let pop = state.npcs.filter(n => n.alive && !n.isCaravanTrader && !n.isTempPriest).length;
+    if (pop > 5) chance += 0.05;
+    
+    // 🔥 БОНУС ЗА НУЖДУ: если эля мало или денег нет — торговец чует наживу
+    if ((state.booze || 0) < 10) chance += 0.20;
+    if ((state.booze || 0) < 3) chance += 0.15;
+    if ((state.gold || 0) < 100) chance += 0.15;
+    if ((state.food || 0) < 10) chance += 0.10;
+    
+    // 🔥 РАННЯЯ ИГРА: первые 500 тиков караван приходит почти гарантированно
+    if (state.tick < 500) chance += 0.20;
+    if (state.tick < 200) chance += 0.20;
+    
+    // ДАВНО НЕ БЫЛО
+    if (!state.lastCaravanTick) state.lastCaravanTick = 0;
+    let timeSinceLast = state.tick - state.lastCaravanTick;
+    if (timeSinceLast > 300) chance += 0.10;
+    if (timeSinceLast > 600) chance += 0.15;
+    if (timeSinceLast > 1200) chance += 0.20;
+
+    // ОГРАНИЧЕНИЕ (не больше 90%)
+    if (chance > 0.9) chance = 0.9;
+
+    if (Math.random() < chance) {
+        spawnCaravan(state);
+        Reg.log(`[Караван] Шанс сработал (${Math.round(chance*100)}%). Торговец прибыл.`, 'sys');
+    }
+  });
+
+  // ФУНКЦИЯ ОЦЕНКИ
+  function getItemValue(item) {
+    let val = 5; 
+    if (item.tags) {
+        if (item.tags.includes('weapon')) val += 30;
+        if (item.tags.includes('armor')) val += 25;
+        if (item.tags.includes('tool')) val += 15;
+        if (item.tags.includes('magic')) val += 100;
+    }
+    if (item.hardness) val += item.hardness * 2;
+    if (item.mass) val += item.mass * 1.5;
+    if (item.beauty) val += item.beauty / 2;
+    
+    if (item.condition === 'bent') val *= 0.5;
+    if (item.condition === 'cracked') val *= 0.2;
+    if (item.integrity !== undefined) {
+        if (item.integrity <= 0) val = 1;
+        else if (item.integrity < 20) val *= 0.5;
+    }
+    return Math.floor(val);
+}
+
+function evaluateDeal(trader, items, availableItems) {
+    if (!trader || !trader.facets) return { offerGold: 10, profit: 0, minProfit: 10, accepted: false, isScam: false, hasPreferred: false, hasObsession: false };
+    let totalValue = 0, hasObsession = false, hasPreferred = false;
+    items.forEach(item => {
+      let base = getItemValue(item);
+      
+      if (trader.obsessionItem && item.name === trader.obsessionItem.name) {
+          hasObsession = true;
+          base *= 3; // Одержимость: x3
+      }
+      if (trader.preferredTag && item.tags && item.tags.includes(trader.preferredTag)) {
+          hasPreferred = true;
+          base *= 1.5; // Любимый тег: x1.5
+      }
+      totalValue += base;
+    });
+    let greedMult = 1.0 - (trader.facets.greed / 200);
+    let offerGold = Math.floor(totalValue * greedMult);
+    let isScam = false;
+    if (trader.facets.greed > 70 && trader.mood < 40 && Math.random() < 0.3) { offerGold = Math.floor(offerGold * 0.5); isScam = true; }
+    let minProfit = 50 - (trader.mood * 0.5); if (minProfit < 10) minProfit = 10;
+    if (hasPreferred) minProfit -= 20;
+    if (hasObsession) minProfit = -100;
+    let profit = totalValue - offerGold;
+    
+    // Фикс: Торговец соглашается, если его выгода >= 0 (не в убытке), либо если это предмет одержимости
+    let accepted = (profit >= 0) || hasObsession;
+    
+    return { offerGold, profit, minProfit, accepted, isScam, hasPreferred, hasObsession };
+  }
+
+  // ИНТЕРФЕЙС
+  setTimeout(() => {
+    const tradeTab = document.querySelector('.tab-btn[data-tab="trade"]');
+    if (!tradeTab) return;
+    const tradeClickHandler = () => {
+      closePanels(); tradeTab.classList.add('active');
+      const panel = document.getElementById('panel-trade'); panel.classList.add('active');
+      const el = panel.querySelector('#trade-text');
+      if (!state || !state.caravan) { el.innerHTML = '<div style="color:#888; padding:10px;">Караван еще не прибыл.</div>'; return; }
+      
+      const car = state.caravan;
+      if (!car.lastSpeech || car.lastSpeech === '...') {
+          car.lastSpeech = generateSpeech(car, 'greet');
+      }
+      let allItems = [];
+      
+      state.npcs.forEach(npc => {
+          if (!npc.alive) return;
+          // ИСКЛЮЧАЕМ ТОРГОВЦА — он уже купил это, нельзя продавать повторно
+          if (npc.isCaravanTrader) return;
+          if (npc.inventory) npc.inventory.forEach((item, index) => allItems.push({ item, source: 'npc_inv', npcId: npc.id, index }));
+          if (npc.equipment) ['weapon','armor','accessory'].forEach(slot => { if (npc.equipment[slot]) allItems.push({ item: npc.equipment[slot], source: 'npc_eq', npcId: npc.id, slot }); });
+      });
+
+      if (!car.obsessionItem && car.preferredTag) {
+        let target = allItems.find(o => o.item.tags && o.item.tags.includes(car.preferredTag));
+        if (target && Math.random() < 0.8) { car.obsessionItem = target.item; Reg.log(`[Караван] ${car.name} замечает ${target.item.name} и жаждет заполучить это.`, 'combat'); }
+      }
+
+      let html = `<div style="background:#2a1a10; padding:8px; border:1px solid #5a3a20; margin-bottom:10px;">
+        <div style="color:#c87b32; font-weight:bold;">${car.name}</div>
+        <div style="color:#a09080; font-size:11px;">Настроение: ${car.mood || 50}/100 | Жадность: ${Math.round((car.facets && car.facets.greed) ? car.facets.greed : 50)} | Любит: ${car.preferredTag || 'всё'}</div>
+        <div style="margin-top:8px; font-style:italic; color:#e0d0b0; border-left:2px solid #c87b32; padding-left:8px;">${car.lastSpeech || '...'}</div>
+      </div>`;
+      
+      if (car.obsessionItem) {
+        html += `<div style="background:#5a1010; padding:8px; border:2px solid #ff0000; margin-bottom:10px; color:#ffaaaa; font-weight:bold;">⚠️ ОН ОДЕРЖИМ: ${car.obsessionItem.name}!<div style="font-size:11px; font-weight:normal; margin-top:4px;">Он не будет торговать, пока не получит это.</div></div>`;
+      }
+      
+      if (car.currentOffer.length > 0) {
+        let offerValue = 0;
+        car.currentOffer.forEach(item => { 
+            let v = getItemValue(item);
+            if (car.obsessionItem && item.name === car.obsessionItem.name) v *= 3;
+            else if (car.preferredTag && item.tags && item.tags.includes(car.preferredTag)) v *= 1.5;
+            offerValue += Math.floor(v); 
+        });
+        html += `<div style="background:#1a2a10; padding:8px; border:1px solid #3a5a20; margin-bottom:10px;"><div style="color:#7aba7a; font-weight:bold;">Ваше предложение:</div>`;
+        car.currentOffer.forEach((item, idx) => { html += `<div style="display:flex; justify-content:space-between; font-size:12px;"><span>${item.name}</span><button class="remove-offer" data-idx="${idx}" style="background:#a83838; color:#fff; border:none; padding:2px 6px; cursor:pointer;">X</button></div>`; });
+        html += `<div style="margin-top:5px; color:#c87b32;">Стоимость: ${offerValue}</div><button id="make-deal" style="width:100%; margin-top:8px; padding:6px; background:#1e1a16; border:1px solid #c87b32; color:#c87b32; cursor:pointer;">Совершить сделку</button></div>`;
+      }
+      
+      html += `<div style="border:1px solid #5a4a3a; padding:8px; margin-bottom:10px; background:#1a1008;"><div style="color:#7aba7a; font-weight:bold; margin-bottom:5px;">Купить у каравана:</div><div style="display:flex; justify-content:space-between;"><span>Эль (в наличии: ${car.booze || 0})</span><button id="buy-booze" style="background:#1e1a16; color:#7aba7a; border:1px solid #3a3528; cursor:pointer; padding:2px 8px;">Купить (15з/шт)</button></div>`;
+      if (car.goods) {
+          car.goods.forEach((g, i) => {
+              html += `<div style="display:flex; justify-content:space-between; margin-top:5px; border-top:1px solid #3a3528; padding-top:5px;"><span>${g.name}</span><button class="buy-good-btn" data-idx="${i}" style="background:#1e1a16; color:#7aba7a; border:1px solid #3a3528; cursor:pointer; padding:2px 8px;">Купить (${g.price}з)</button></div>`;
+          });
+      }
+      html += `</div>`;
+      
+      if (allItems.length === 0) { html += '<div style="color:#888;">Нет предметов.</div>'; } 
+      else {
+        html += '<h3 style="color:#c87b32; margin:10px 0;">Предметы:</h3><div style="max-height:300px; overflow-y:auto; border:1px solid #3a3528; padding:5px; margin-bottom:10px;">';
+        allItems.forEach((obj, idx) => {
+          const isInOffer = car.currentOffer.includes(obj.item);
+          let btnText = isInOffer ? 'В корзине' : 'Предложить'; let btnColor = isInOffer ? '#a83838' : '#7aba7a';
+          let owner = ''; if (obj.source === 'npc_inv' || obj.source === 'npc_eq') { const n = state.npcs.find(x => x.id === obj.npcId); owner = n ? ` <span style="color:#888;">(${n.name})</span>` : ''; }
+          let isObsessionMark = (car.obsessionItem && obj.item.name === car.obsessionItem.name) ? ' <span style="color:#ff0000; font-weight:bold;">[ОДЕРЖИМ]</span>' : '';
+          html += `<div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:12px; border-bottom:1px solid #2a2520; padding-bottom:2px;"><span>${obj.item.name || 'Предмет'}${owner}${isObsessionMark}</span><button class="offer-btn" data-idx="${idx}" style="background:#1e1a16; color:${btnColor}; border:1px solid #3a3528; cursor:pointer; padding:2px 6px;" ${isInOffer ? 'disabled' : ''}>${btnText}</button></div>`;
+        });
+        html += '</div>';
+      }
+      el.innerHTML = html;
+
+      panel.querySelectorAll('.remove-offer').forEach(btn => { btn.onclick = () => { state.caravan.currentOffer.splice(parseInt(btn.getAttribute('data-idx')), 1); tradeTab.click(); }; });
+      panel.querySelectorAll('.offer-btn').forEach(btn => { btn.onclick = () => { const idx = parseInt(btn.getAttribute('data-idx')); const obj = allItems[idx]; if (!state.caravan.currentOffer.includes(obj.item)) { state.caravan.currentOffer.push(obj.item); tradeTab.click(); } }; });
+
+      const dealBtn = document.getElementById('make-deal');
+      if (dealBtn) {
+        dealBtn.onclick = () => {
+          const offerItems = car.currentOffer;
+          if (offerItems.length === 0) return;
+          if (car.obsessionItem) { let hasIt = offerItems.find(i => i.name === car.obsessionItem.name); if (!hasIt) { car.lastSpeech = generateSpeech(car, 'reject', { item: offerItems[0].name, demandItem: car.obsessionItem.name }); car.mood -= 15; tradeTab.click(); return; } }
+          const evalRes = evaluateDeal(car, offerItems, allItems);
+          if (evalRes.accepted) {
+            if (evalRes.isScam && !confirm(`${car.name} пытается обмануть!\n\n${evalRes.offerGold}з вместо ${Math.floor(evalRes.offerGold*2)}з.\n\nСогласиться?`)) return;
+            car.gold -= evalRes.offerGold; state.gold += evalRes.offerGold; car.mood += 20;
+            offerItems.forEach(item => {
+              for (let k in state.cells) { const c = state.cells[k]; if (c.items) { const i = c.items.findIndex(x => x === item); if (i >= 0) { c.items.splice(i, 1); continue; } } }
+              state.npcs.forEach(npc => { if (!npc.alive) return; if (npc.inventory) { const i = npc.inventory.findIndex(x => x === item); if (i >= 0) npc.inventory.splice(i, 1); } if (npc.equipment) ['weapon','armor','accessory'].forEach(slot => { if (npc.equipment[slot] === item) { npc.equipment[slot] = null;  } }); });
+            });
+            car.lastSpeech = generateSpeech(car, 'accept', { item: offerItems[0].name }); Reg.log(`[Караван] Сделка: ${offerItems[0].name}.`, 'good');
+            if (window.renderUI) window.renderUI();
+            const goldEl = document.getElementById('ui-gold'); if (goldEl) goldEl.textContent = state.gold;
+            car.currentOffer = []; car.demandedItems = []; if (evalRes.hasObsession) car.obsessionItem = null;
+          } else {
+            car.mood -= 10;
+            if (car.mood <= 0) { Reg.log(`[Караван] ${car.name} в ярости уезжает!`, 'death'); state.npcs = state.npcs.filter(n => n.id !== car.npcId && !n.isCaravanTrader); state.caravan = null; state.caravanCooldown = state.tick + 120; closePanels(); return; }
+            let availableDemand = allItems.find(o => !car.currentOffer.includes(o.item) && o.item.name && !car.currentOffer.some(co => co.name === o.item.name));
+            if (availableDemand) { let dn = availableDemand.item.name; if (!car.demandedItems.includes(dn)) car.demandedItems.push(dn); car.lastSpeech = generateSpeech(car, 'counter', { item: offerItems[0].name, demandItem: dn }); }
+            tradeTab.click();
+          }
+        };
+      }
+
+      panel.querySelectorAll('.buy-good-btn').forEach(btn => {
+          btn.onclick = () => {
+              let idx = parseInt(btn.getAttribute('data-idx'));
+              let good = car.goods[idx];
+              if (!good) return;
+              if (state.gold < good.price) { car.lastSpeech = generateSpeech(car, 'no_gold', { item: good.name, demandItem: 'золото' }); tradeTab.click(); return; }
+              state.gold -= good.price;
+              
+              if (good.type === 'food') {
+                  state.food = (state.food || 0) + good.amount;
+                  car.lastSpeech = generateSpeech(car, 'bought', { item: good.name }); tradeTab.click();
+              } else {
+                  let placed = false;
+                  for (let r = 1; r <= 10 && !placed; r++) {
+                      for (let dx = -r; dx <= r && !placed; dx++) {
+                          for (let dy = -r; dy <= r && !placed; dy++) {
+                              const cell = getCell(state.forgePos.x+dx, state.forgePos.y+dy);
+                              if (cell && cell.type === 'floor') {
+                                  // Создаем предмет с эмодзи (если есть) или картинкой
+                                  let emojiMap = {
+                                      'Паёк': '🍞', 'Сырое мясо': '🥩', 'Железный слиток': '🧱', 'Самоцветы': '💎',
+                                      'Кожаный доспех': '🦺', 'Железный шлем': '🪖', 'Стальной меч': '🗡️', 'Амулет': '📿'
+                                  };
+                                  let itemEmoji = emojiMap[good.name] || '📦';
+                                  let newItem = { 
+                                      name: good.name, 
+                                      type: good.type, 
+                                      tags: [good.spawnTag || 'misc'], 
+                                      file: itemEmoji,
+                                      isEmoji: true,
+                                      mass: 2
+                                  };
+                                  
+                                  // Если это оружие или броня, ищем образец в базе GAME_ITEMS, чтобы взять части и прочность
+                                  if ((good.type === 'weapon' || good.type === 'armor') && window.GAME_ITEMS) {
+                                      let sample = window.GAME_ITEMS.find(i => i.type === good.type);
+                                      if (sample) {
+                                          if (sample.parts) newItem.parts = JSON.parse(JSON.stringify(sample.parts)); // Глубокая копия
+                                          if (sample.integrity) newItem.integrity = sample.integrity;
+                                      } else {
+                                          // Если образца нет, даем базовые
+                                          newItem.integrity = 100;
+                                          newItem.parts = good.type === 'weapon' ? [{name:'лезвие', hp:60}, {name:'рукоять', hp:40}] : [{name:'нагрудник', hp:80}, {name:'завязки', hp:30}];
+                                      }
+                                  }
+                                  if (!cell.items) cell.items = [];
+                                  cell.items.push(newItem);
+                                  placed = true;
+                              }
+                          }
+                      }
+                  }
+                  car.lastSpeech = generateSpeech(car, 'bought', { item: good.name }); tradeTab.click();
+              }
+              car.goods.splice(idx, 1); // Товар кончился
+              tradeTab.click();
+          };
+      });
+
+      const buyBtn = document.getElementById('buy-booze');
+      if (buyBtn) buyBtn.onclick = () => {
+        if (state.gold < 15) { car.lastSpeech = generateSpeech(car, 'no_gold', { item: 'эль', demandItem: 'золото' }); tradeTab.click(); return; }
+        if (!car.booze || car.booze <= 0) { car.lastSpeech = generateSpeech(car, 'no_stock', { item: 'эль' }); tradeTab.click(); return; }
+        state.gold -= 15; car.gold += 15; car.booze -= 1;
+        let placed = false; for (let r = 2; r <= 10 && !placed; r++) for (let dx = -r; dx <= r && !placed; dx++) for (let dy = -r; dy <= r && !placed; dy++) { const cell = getCell(state.forgePos.x+dx, state.forgePos.y+dy); if (cell && cell.type === 'floor' && !cell.items && !cell.monster) { cell.type = 'beer_tap'; placed = true; } }
+        if (!placed) {
+            if (!state.npcs[0].inventory) state.npcs[0].inventory = [];
+            state.npcs[0].inventory.push({ name: 'Эль', type: 'food', tags: ['drink'], amount: 1 });
+        }
+        tradeTab.click();
+      };
+    };
+    
+    // ЗАЩИТА ОТ ПЕРЕЗАПИСИ CORE.JS
+    tradeTab.onclick = tradeClickHandler;
+    setInterval(() => {
+        if (tradeTab.onclick !== tradeClickHandler) {
+            tradeTab.onclick = tradeClickHandler;
+        }
+    }, 500);
+  }, 1000);
+})();

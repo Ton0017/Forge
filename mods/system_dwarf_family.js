@@ -102,7 +102,8 @@
 
     const pick = arr => arr[Math.floor(Math.random() * arr.length)];
     const childGender = Math.random() < 0.5 ? 'male' : 'female';
-    const childSkin = childGender === 'female' ? 'girl.png' : 'human child.png';
+    const _childSkins = ['skeleton_0.png', 'goblin_0.png'];
+    const childSkin = _childSkins[Math.floor(Math.random() * _childSkins.length)];
     const names = (Reg.df && Reg.df.names) ? Reg.df.names : ['Малыш'];
     const surnames = (Reg.df && Reg.df.surnames) ? Reg.df.surnames : ['Юный'];
 
